@@ -1,5 +1,6 @@
 ---
 import activity from '../data/activity.json';
+import { roundThousands } from '../lib/stats';
 
 const CELL = 12;
 const GAP = 3;
@@ -23,17 +24,38 @@ const cells = activity.weeks.flatMap((week, column) =>
 );
 const width = activity.weeks.length * STEP - GAP;
 const height = 7 * STEP - GAP;
-const hidden = number.format(activity.private);
+const { totals } = activity;
+const measured = [
+  ['Commits', totals.commits],
+  ['Pull requests merged', totals.pullRequests],
+  ['Lines of code', totals.lines],
+  ['Lines of tests', totals.testLines],
+  ['Repositories', totals.repositories],
+] as const;
 const total = number.format(activity.total);
+const hidden = number.format(activity.private);
 ---
 
 <section class="activity" aria-labelledby="activity-title">
   <h2 id="activity-title" class="display">
-    {total} contributions,<br /><span>{hidden} you can’t see</span>
+    {roundThousands(totals.lines)} lines,<br /><span>nearly all of it private</span>
   </h2>
+  <dl class="measured">
+    {
+      measured.map(([label, value]) => (
+        <div>
+          <dt>{label}</dt>
+          <dd data-count={value}>{number.format(value)}</dd>
+        </div>
+      ))
+    }
+  </dl>
   <p class="caption">
-    My last twelve months of GitHub contributions, as of {activity.generated}. Nearly all of them
-    are in private repositories, which is why my public profile looks so quiet.
+    Measured from GitHub every day, most recently on {activity.generated}. Commits include the ones
+    inside squash-merged pull requests, which GitHub’s own graph collapses into one. Lines are what’s
+    in the repositories today, written with coding agents as well as by hand. Work in my employer’s
+    repositories isn’t counted. The grid is my last year of contributions: {total}, of which {hidden}{' '}
+    are private.
   </p>
   <div class="scroller">
     <svg
@@ -73,11 +95,33 @@ const total = number.format(activity.total);
     color: var(--flare);
   }
 
+  .measured {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.5rem;
+    margin-top: 2.25rem;
+    border-top: 1px solid var(--line);
+    padding-top: 0.75rem;
+  }
+
+  .measured dt {
+    font-size: 0.75rem;
+    color: var(--dim);
+  }
+
+  .measured dd {
+    font-family: var(--display);
+    font-weight: 800;
+    font-size: clamp(2rem, 4.4vw, 4.5rem);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+
   .caption {
     color: var(--dim);
-    max-width: 36rem;
-    margin: 1rem 0 2.5rem;
-    font-size: 0.875rem;
+    max-width: 46rem;
+    margin: 1.5rem 0 2.5rem;
+    font-size: 0.8125rem;
   }
 
   .scroller {
@@ -136,6 +180,10 @@ const total = number.format(activity.total);
   }
 
   @media (max-width: 860px) {
+    .measured {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .languages {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }

@@ -5,16 +5,17 @@ import { TOPOLOGY } from '../sim/engine';
 const lines = ['Software that', 'keeps its word'];
 
 const place: Record<string, [number, number]> = {
-  cad: [5, 16],
-  phones: [5, 50],
-  radio: [5, 84],
-  outbox: [37, 50],
-  'relay-a': [65, 24],
-  'relay-b': [65, 76],
-  'agency-1': [95, 16],
-  'agency-2': [95, 50],
-  'agency-3': [95, 84],
+  cad: [5, 15],
+  phones: [5, 48],
+  radio: [5, 81],
+  ingest: [30, 48],
+  store: [49, 48],
+  translate: [68, 48],
+  'product-a': [94, 15],
+  'product-b': [94, 48],
+  'product-c': [94, 81],
 };
+const products = TOPOLOGY.filter((node) => node.kind === 'product');
 ---
 
 <section class="hero" id="top" aria-labelledby="hero-title">
@@ -40,7 +41,7 @@ const place: Record<string, [number, number]> = {
       the software people depend on when something has already gone wrong.
     </p>
     <p class="prompt no-print">
-      <span id="sim-status" role="status">This system is running. Take any node down.</span>
+      <span id="sim-status" role="status">A live model of what I run: agency to hub to product, and back. Take a node down, or switch a product off.</span>
     </p>
   </div>
 
@@ -62,10 +63,36 @@ const place: Record<string, [number, number]> = {
         </button>
       ))
     }
+    {
+      products.map((node) => (
+        <button
+          type="button"
+          class="route"
+          role="switch"
+          aria-checked="true"
+          aria-label={`Route messages to ${node.label}`}
+          data-route={node.id}
+          data-label={node.label}
+          style={`left:${place[node.id]?.[0]}%;top:${place[node.id]?.[1]}%`}
+        >
+          <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+        </button>
+      ))
+    }
+  </div>
+
+  <div class="readout no-print" aria-hidden="true">
+    <p class="translation" id="translation"><span>Waiting for traffic</span></p>
+    <p class="legend">
+      <span class="to">To products</span>
+      <span class="back">Back to agencies</span>
+      <span class="retry">Retry</span>
+    </p>
   </div>
 
   <dl class="counters no-print">
-    <div><dt>Delivered</dt><dd id="stat-applied">0</dd></div>
+    <div><dt>Delivered</dt><dd id="stat-delivered">0</dd></div>
+    <div><dt>Returned</dt><dd id="stat-returned">0</dd></div>
     <div><dt>Retried</dt><dd id="stat-retried">0</dd></div>
     <div><dt>Deduplicated</dt><dd id="stat-deduplicated">0</dd></div>
     <div class="lost"><dt>Lost</dt><dd id="stat-lost">0</dd></div>
@@ -85,7 +112,7 @@ const place: Record<string, [number, number]> = {
     min-height: 100svh;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(13rem, 1fr) auto;
+    grid-template-rows: auto auto minmax(15rem, 1fr) auto auto;
     padding-top: 3.5rem;
     overflow: hidden;
   }
@@ -157,8 +184,8 @@ const place: Record<string, [number, number]> = {
 
   .network {
     position: relative;
-    margin: 0.75rem var(--gutter) 0.5rem;
-    min-height: 13rem;
+    margin: 0.5rem var(--gutter) 0.25rem;
+    min-height: 15rem;
   }
 
   canvas {
@@ -179,8 +206,24 @@ const place: Record<string, [number, number]> = {
     cursor: crosshair;
   }
 
-  .node.outbox {
+  .node.store {
     --size: 1.875rem;
+  }
+
+  .node.product .mark::after {
+    inset: 18%;
+  }
+
+  [data-node='product-a'] .mark::after {
+    border-radius: 50%;
+  }
+
+  [data-node='product-b'] .mark::after {
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  }
+
+  [data-node='product-c'] .mark::after {
+    clip-path: polygon(50% 4%, 100% 96%, 0 96%);
   }
 
   .mark {
@@ -228,17 +271,115 @@ const place: Record<string, [number, number]> = {
     color: var(--flare);
   }
 
-  .node.source .label {
+  .node.agency .label {
     left: calc(50% - var(--size) / 2);
   }
 
-  .node.agency .label {
+  .node.product .label {
     right: calc(50% - var(--size) / 2);
+  }
+
+  .route {
+    position: absolute;
+    width: 2.75rem;
+    height: 1.75rem;
+    transform: translate(-50%, 0.75rem);
+    display: grid;
+    place-items: center;
+  }
+
+  .track {
+    position: relative;
+    width: 1.75rem;
+    height: 0.8125rem;
+    border: 1px solid var(--bone);
+    transition: border-color 0.15s;
+  }
+
+  .thumb {
+    position: absolute;
+    top: 1.5px;
+    left: 1.5px;
+    width: 0.5rem;
+    height: 0.5rem;
+    background: var(--bone);
+    transform: translateX(0.875rem);
+    transition: transform 0.2s var(--ease), background 0.15s;
+  }
+
+  .route:hover .track {
+    border-color: var(--flare);
+  }
+
+  .route[aria-checked='false'] .track {
+    border-color: var(--dim);
+    border-style: dashed;
+  }
+
+  .route[aria-checked='false'] .thumb {
+    background: var(--dim);
+    transform: none;
+  }
+
+  .readout {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 2rem;
+    padding: 0.4rem var(--gutter) 0.6rem;
+    font-size: 0.6875rem;
+    color: var(--dim);
+  }
+
+  .translation {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .translation :global(b) {
+    font-weight: 400;
+    color: var(--bone);
+  }
+
+  .translation :global(i) {
+    font-style: normal;
+    color: var(--dim);
+    margin-inline: 0.5em;
+  }
+
+  .legend {
+    display: flex;
+    flex: none;
+    gap: 1.25rem;
+  }
+
+  .legend span::before {
+    content: '';
+    display: inline-block;
+    width: 0.875rem;
+    height: 2px;
+    margin-right: 0.45em;
+    vertical-align: 0.2em;
+    background: currentcolor;
+  }
+
+  .to {
+    color: var(--bone);
+  }
+
+  .back {
+    color: var(--answer);
+  }
+
+  .retry {
+    color: var(--flare);
   }
 
   .counters {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.4fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.3fr);
     border-top: 1px solid var(--line);
   }
 
@@ -294,7 +435,11 @@ const place: Record<string, [number, number]> = {
     }
 
     .network {
-      min-height: 19rem;
+      min-height: 20rem;
+    }
+
+    .legend {
+      display: none;
     }
 
     .intro-row {
@@ -313,7 +458,7 @@ const place: Record<string, [number, number]> = {
     }
 
     .hero {
-      grid-template-rows: auto auto minmax(19rem, 1fr) auto;
+      grid-template-rows: auto auto minmax(20rem, 1fr) auto auto;
     }
 
     .counters > div {

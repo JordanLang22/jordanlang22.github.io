@@ -1,6 +1,7 @@
 import { createRng } from './rng';
 
-export type NodeKind = 'source' | 'outbox' | 'relay' | 'agency';
+export type NodeKind = 'agency' | 'ingest' | 'store' | 'translate' | 'product';
+export type Direction = 'inbound' | 'return';
 
 export interface SimNode {
   readonly id: string;
@@ -8,33 +9,47 @@ export interface SimNode {
   up: boolean;
 }
 
-/** A fact produced by a source. It belongs to one incident and has a place in that incident. */
-export interface SimEvent {
+/** One message handed to the hub, by an agency system or by a product answering it. */
+export interface Envelope {
   readonly id: number;
   readonly incident: number;
   readonly seq: number;
-  readonly source: string;
+  readonly from: string;
+  /** The agency system that opened this incident, which is where any answer has to go. */
   readonly agency: string;
+  readonly direction: Direction;
 }
 
-export type PacketKind = 'commit' | 'commit-ack' | 'publish' | 'forward' | 'ack' | 'ack-relay';
+/** One copy of a stored message, on its way to exactly one target. */
+export interface Delivery {
+  readonly id: number;
+  readonly envelope: Envelope;
+  readonly target: string;
+  readonly seq: number;
+}
+
+export type PacketKind = 'submit' | 'submit-ack' | 'deliver' | 'deliver-ack';
 
 export interface Packet {
-  readonly event: SimEvent;
   readonly kind: PacketKind;
+  readonly direction: Direction;
+  readonly route: readonly string[];
+  readonly hop: number;
   readonly from: string;
   readonly to: string;
   readonly departed: number;
   readonly arrives: number;
   /** True when this packet is a retry of something already sent. */
   readonly retry: boolean;
-  /** The relay carrying this event, so the ack can come back the same way. */
-  readonly relay?: string;
+  readonly envelope: Envelope;
+  readonly delivery?: Delivery;
 }
 
 export interface SimStats {
   emitted: number;
-  applied: number;
+  stored: number;
+  delivered: number;
+  returned: number;
   retried: number;
   deduplicated: number;
   dropped: number;
@@ -42,114 +57,146 @@ export interface SimStats {
 
 export type SimSignal =
   | { type: 'dropped'; node: string }
-  | { type: 'applied'; node: string; event: SimEvent }
+  | { type: 'stored'; node: string; envelope: Envelope; targets: readonly string[] }
+  | { type: 'applied'; node: string; delivery: Delivery }
   | { type: 'deduplicated'; node: string };
 
 export interface SimConfig {
   readonly seed: number;
-  /** Probability that an up source emits on a given tick. */
+  /** Probability that an up agency system emits on a given tick. */
   readonly emitRate: number;
+  /** Probability that a product answers a message it applied. */
+  readonly replyRate: number;
   /** Lower and upper bound of a single hop, in ticks. */
   readonly latency: readonly [number, number];
-  /** First retry delay in ticks. Must exceed a round trip or every event is sent twice. */
+  /** First retry delay in ticks. Must exceed a round trip or everything is sent twice. */
   readonly retryBase: number;
   readonly retryCap: number;
-  /** How many due outbox rows are published per tick. */
+  /** How many due deliveries the store publishes per tick. */
   readonly publishRate: number;
 }
 
 export const DEFAULT_CONFIG: SimConfig = {
   seed: 2016,
-  emitRate: 0.085,
-  latency: [16, 24],
+  emitRate: 0.042,
+  replyRate: 0.45,
+  latency: [15, 22],
   retryBase: 110,
   retryCap: 420,
-  publishRate: 3,
+  publishRate: 4,
 };
 
 export const TOPOLOGY: readonly (Pick<SimNode, 'id' | 'kind'> & { label: string })[] = [
-  { id: 'cad', kind: 'source', label: 'CAD' },
-  { id: 'phones', kind: 'source', label: 'Phones' },
-  { id: 'radio', kind: 'source', label: 'Radio' },
-  { id: 'outbox', kind: 'outbox', label: 'Outbox' },
-  { id: 'relay-a', kind: 'relay', label: 'Relay A' },
-  { id: 'relay-b', kind: 'relay', label: 'Relay B' },
-  { id: 'agency-1', kind: 'agency', label: 'Agency 1' },
-  { id: 'agency-2', kind: 'agency', label: 'Agency 2' },
-  { id: 'agency-3', kind: 'agency', label: 'Agency 3' },
+  { id: 'cad', kind: 'agency', label: 'CAD' },
+  { id: 'phones', kind: 'agency', label: 'Phones' },
+  { id: 'radio', kind: 'agency', label: 'Radio' },
+  { id: 'ingest', kind: 'ingest', label: 'Ingest' },
+  { id: 'store', kind: 'store', label: 'Store' },
+  { id: 'translate', kind: 'translate', label: 'Translate' },
+  { id: 'product-a', kind: 'product', label: 'Product A' },
+  { id: 'product-b', kind: 'product', label: 'Product B' },
+  { id: 'product-c', kind: 'product', label: 'Product C' },
 ];
 
-interface Attempt {
-  readonly event: SimEvent;
+interface Attempt<T> {
+  readonly item: T;
   nextAttempt: number;
   attempts: number;
 }
 
+interface Stream<T> {
+  next: number;
+  readonly held: Map<number, T>;
+}
+
 interface Incident {
   readonly id: number;
-  readonly agency: string;
   nextSeq: number;
   remaining: number;
 }
 
-interface IncidentLedger {
-  next: number;
-  readonly buffered: Map<number, SimEvent>;
-}
-
-const OPEN_INCIDENTS_PER_SOURCE = 2;
-const OUTBOX = 'outbox';
+const STORE = 'store';
+const OPEN_INCIDENTS_PER_AGENCY = 2;
+const ACK_KINDS: Partial<Record<PacketKind, PacketKind>> = {
+  submit: 'submit-ack',
+  deliver: 'deliver-ack',
+};
 
 /**
- * A deterministic model of a transactional outbox.
+ * A deterministic model of a two-way integration hub.
  *
- * Delivery is at-least-once: nothing is removed from the outbox until the receiving agency has
- * acknowledged it, and any hop can lose a packet. Agencies turn that into exactly-once effects by
- * remembering a per-incident watermark, and hold early arrivals so incidents apply in order.
- * Everything is driven by `step()`, so a run depends only on its seed and fault schedule.
+ * Agency systems submit messages to the hub, which stores them in order, fans each one out to the
+ * products with routing switched on, and translates it for each. Products can answer, and the
+ * answer travels the same way back to the agency system that opened the incident.
+ *
+ * Both directions share one protocol. A sender keeps a message until the store has acknowledged
+ * it, and the store keeps a delivery until its target has. Any hop can lose any packet, so delivery
+ * is at-least-once. Receivers turn that into exactly-once effects with a per-stream watermark, and
+ * hold early arrivals so that every stream applies in order. Everything is driven by `step()`, so a
+ * run depends only on its seed and on the faults applied to it.
  */
 export class Simulation {
   readonly nodes: ReadonlyMap<string, SimNode>;
-  readonly stats: SimStats = { emitted: 0, applied: 0, retried: 0, deduplicated: 0, dropped: 0 };
+  readonly routing = new Map<string, boolean>();
+  readonly stats: SimStats = {
+    emitted: 0,
+    stored: 0,
+    delivered: 0,
+    returned: 0,
+    retried: 0,
+    deduplicated: 0,
+    dropped: 0,
+  };
   packets: Packet[] = [];
   tick = 0;
-  /** When false, sources stop producing new events and the system drains what it already has. */
+  /** When false, agencies stop producing new incidents and the system drains what it has. */
   emitting = true;
-  onApply?: (agency: string, event: SimEvent) => void;
+  onStore?: (envelope: Envelope, targets: readonly string[]) => void;
+  onApply?: (delivery: Delivery) => void;
 
   private readonly config: SimConfig;
   private readonly random: () => number;
-  private readonly nodeList: readonly SimNode[];
-  private readonly relays: readonly SimNode[];
   private readonly agencies: readonly SimNode[];
-  private readonly sources: readonly SimNode[];
+  private readonly products: readonly SimNode[];
   private readonly incidents = new Map<string, Incident[]>();
-  private readonly sourcePending = new Map<string, Map<number, Attempt>>();
-  private readonly outboxRows = new Map<number, Attempt>();
-  private readonly ledgers = new Map<string, Map<number, IncidentLedger>>();
+  private readonly pending = new Map<string, Map<number, Attempt<Envelope>>>();
+  private readonly rows = new Map<number, Attempt<Delivery>>();
+  private readonly inboundStreams = new Map<string, Stream<Envelope>>();
+  private readonly targetStreams = new Map<string, Stream<Delivery>>();
+  private readonly nextDeliverySeq = new Map<string, number>();
+  private readonly nextReplySeq = new Map<string, number>();
+  private readonly unreleased = new Set<number>();
   private readonly unapplied = new Set<number>();
   private signals: SimSignal[] = [];
-  private nextEventId = 1;
+  private nextEnvelopeId = 1;
+  private nextDeliveryId = 1;
   private nextIncidentId = 1;
 
   constructor(config: Partial<SimConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.random = createRng(this.config.seed);
-    this.nodeList = TOPOLOGY.map(({ id, kind }) => ({ id, kind, up: true }));
-    this.nodes = new Map(this.nodeList.map((node) => [node.id, node]));
-    this.relays = this.nodeList.filter((node) => node.kind === 'relay');
-    this.agencies = this.nodeList.filter((node) => node.kind === 'agency');
-    this.sources = this.nodeList.filter((node) => node.kind === 'source');
-    for (const source of this.sources) {
-      this.incidents.set(source.id, []);
-      this.sourcePending.set(source.id, new Map());
+    const nodes = TOPOLOGY.map(({ id, kind }): SimNode => ({ id, kind, up: true }));
+    this.nodes = new Map(nodes.map((node) => [node.id, node]));
+    this.agencies = nodes.filter((node) => node.kind === 'agency');
+    this.products = nodes.filter((node) => node.kind === 'product');
+    for (const agency of this.agencies) {
+      this.incidents.set(agency.id, []);
+      this.pending.set(agency.id, new Map());
     }
-    for (const agency of this.agencies) this.ledgers.set(agency.id, new Map());
+    for (const product of this.products) {
+      this.pending.set(product.id, new Map());
+      this.routing.set(product.id, true);
+    }
   }
 
   setUp(id: string, up: boolean): void {
     const node = this.nodes.get(id);
     if (node) node.up = up;
+  }
+
+  /** Choose whether new messages go to a product. This is a decision, not a failure. */
+  setRouting(product: string, on: boolean): void {
+    if (this.routing.has(product)) this.routing.set(product, on);
   }
 
   /** Advance one tick and return what happened during it. */
@@ -158,63 +205,56 @@ export class Simulation {
     this.signals = [];
     this.deliverArrivals();
     if (this.emitting) this.emit();
-    this.retrySources();
-    this.publishFromOutbox();
+    this.retrySenders();
+    this.publish();
     return this.signals;
   }
 
-  /** Events currently waiting to be applied anywhere in the system. */
-  get backlog(): number {
-    return this.unapplied.size;
-  }
-
-  get outboxDepth(): number {
-    return this.outboxRows.size;
+  get storeDepth(): number {
+    return this.rows.size;
   }
 
   get quiescent(): boolean {
+    let waiting = 0;
+    for (const queue of this.pending.values()) waiting += queue.size;
     return (
+      waiting === 0 &&
+      this.unreleased.size === 0 &&
       this.unapplied.size === 0 &&
-      this.outboxRows.size === 0 &&
+      this.rows.size === 0 &&
       this.packets.length === 0 &&
-      this.heldAtAgencies === 0
+      this.heldByReceivers === 0
     );
   }
 
-  /** Early arrivals parked at agencies. Stale duplicates must never accumulate here. */
-  get heldAtAgencies(): number {
+  /** Early arrivals parked at receivers. Stale duplicates must never accumulate here. */
+  get heldByReceivers(): number {
     let held = 0;
-    for (const ledger of this.ledgers.values()) {
-      for (const incident of ledger.values()) held += incident.buffered.size;
-    }
+    for (const stream of this.inboundStreams.values()) held += stream.held.size;
+    for (const stream of this.targetStreams.values()) held += stream.held.size;
     return held;
   }
 
   /**
-   * Count events that were emitted, are not applied, and are not held anywhere that could still
-   * deliver them. Computed from real state, not assumed, so the number on the page can be wrong.
+   * Count messages the system owes someone but no longer holds anywhere that could deliver them.
+   * Computed from real state, not assumed, so the number on the page is able to be wrong.
    */
   lost(): number {
+    const heldEnvelopes = new Set<number>();
+    for (const queue of this.pending.values()) {
+      for (const id of queue.keys()) heldEnvelopes.add(id);
+    }
+    for (const stream of this.inboundStreams.values()) {
+      for (const envelope of stream.held.values()) heldEnvelopes.add(envelope.id);
+    }
+    const heldDeliveries = new Set<number>(this.rows.keys());
+    for (const stream of this.targetStreams.values()) {
+      for (const delivery of stream.held.values()) heldDeliveries.add(delivery.id);
+    }
     let lost = 0;
-    for (const id of this.unapplied) {
-      if (!this.isHeld(id)) lost += 1;
-    }
+    for (const id of this.unreleased) if (!heldEnvelopes.has(id)) lost += 1;
+    for (const id of this.unapplied) if (!heldDeliveries.has(id)) lost += 1;
     return lost;
-  }
-
-  private isHeld(id: number): boolean {
-    if (this.outboxRows.has(id)) return true;
-    for (const pending of this.sourcePending.values()) {
-      if (pending.has(id)) return true;
-    }
-    for (const ledger of this.ledgers.values()) {
-      for (const incident of ledger.values()) {
-        for (const event of incident.buffered.values()) {
-          if (event.id === id) return true;
-        }
-      }
-    }
-    return false;
   }
 
   private deliverArrivals(): void {
@@ -225,158 +265,202 @@ export class Simulation {
     }
     this.packets = inFlight;
     for (const packet of arrived) {
-      if (this.nodes.get(packet.to)?.up) {
-        this.receive(packet);
-      } else {
+      if (!this.nodes.get(packet.to)?.up) {
         this.stats.dropped += 1;
         this.signals.push({ type: 'dropped', node: packet.to });
+      } else if (packet.hop + 1 < packet.route.length - 1) {
+        this.launch({ ...packet, hop: packet.hop + 1 });
+      } else {
+        this.receive(packet);
       }
     }
   }
 
   private receive(packet: Packet): void {
-    const { event, kind, to, relay } = packet;
-    switch (kind) {
-      case 'commit':
-        if (!this.outboxRows.has(event.id) && this.unapplied.has(event.id)) {
-          this.outboxRows.set(event.id, { event, nextAttempt: this.tick, attempts: 0 });
-        }
-        this.send(event, 'commit-ack', to, event.source);
-        break;
-      case 'commit-ack':
-        this.sourcePending.get(event.source)?.delete(event.id);
-        break;
-      case 'publish':
-        this.send(event, 'forward', to, event.agency, { relay: to, retry: packet.retry });
-        break;
-      case 'forward':
-        this.applyAtAgency(to, event);
-        if (relay) this.send(event, 'ack-relay', to, relay);
-        break;
-      case 'ack-relay':
-        this.send(event, 'ack', to, OUTBOX);
-        break;
-      case 'ack':
-        this.outboxRows.delete(event.id);
-        break;
+    const { kind, envelope, delivery } = packet;
+    if (kind === 'submit') this.receiveAtStore(envelope);
+    if (kind === 'deliver' && delivery) this.receiveAtTarget(delivery);
+    if (kind === 'submit-ack') this.pending.get(envelope.from)?.delete(envelope.id);
+    if (kind === 'deliver-ack' && delivery) this.rows.delete(delivery.id);
+    const ack = ACK_KINDS[kind];
+    if (ack) this.launch({ ...packet, kind: ack, route: [...packet.route].reverse(), hop: 0 });
+  }
+
+  private receiveAtStore(envelope: Envelope): void {
+    const key = `${envelope.incident}:${envelope.from}`;
+    this.accept(this.inboundStreams, key, envelope.seq, envelope, STORE, (ready) => {
+      this.unreleased.delete(ready.id);
+      this.stats.stored += 1;
+      const targets = this.targetsFor(ready);
+      for (const target of targets) this.createDelivery(ready, target);
+      this.onStore?.(ready, targets);
+      this.signals.push({ type: 'stored', node: STORE, envelope: ready, targets });
+    });
+  }
+
+  private targetsFor(envelope: Envelope): readonly string[] {
+    if (envelope.direction === 'return') return [envelope.agency];
+    return this.products.filter(({ id }) => this.routing.get(id)).map(({ id }) => id);
+  }
+
+  private createDelivery(envelope: Envelope, target: string): void {
+    const key = `${envelope.incident}>${target}`;
+    const seq = (this.nextDeliverySeq.get(key) ?? 0) + 1;
+    this.nextDeliverySeq.set(key, seq);
+    const delivery: Delivery = { id: this.nextDeliveryId++, envelope, target, seq };
+    this.unapplied.add(delivery.id);
+    this.rows.set(delivery.id, { item: delivery, nextAttempt: this.tick, attempts: 0 });
+  }
+
+  private receiveAtTarget(delivery: Delivery): void {
+    const key = `${delivery.envelope.incident}>${delivery.target}`;
+    this.accept(this.targetStreams, key, delivery.seq, delivery, delivery.target, (ready) => {
+      this.unapplied.delete(ready.id);
+      const inbound = ready.envelope.direction === 'inbound';
+      this.stats[inbound ? 'delivered' : 'returned'] += 1;
+      this.signals.push({ type: 'applied', node: ready.target, delivery: ready });
+      this.onApply?.(ready);
+      if (inbound && this.random() < this.config.replyRate) this.answer(ready);
+    });
+  }
+
+  /** The watermark and the hold-back buffer: at-least-once in, exactly-once and in order out. */
+  private accept<T>(
+    streams: Map<string, Stream<T>>,
+    key: string,
+    seq: number,
+    item: T,
+    node: string,
+    release: (ready: T) => void,
+  ): void {
+    let stream = streams.get(key);
+    if (!stream) {
+      stream = { next: 1, held: new Map() };
+      streams.set(key, stream);
+    }
+    if (seq < stream.next || stream.held.has(seq)) {
+      this.stats.deduplicated += 1;
+      this.signals.push({ type: 'deduplicated', node });
+      return;
+    }
+    stream.held.set(seq, item);
+    for (let ready = stream.held.get(stream.next); ready; ready = stream.held.get(stream.next)) {
+      stream.held.delete(stream.next);
+      stream.next += 1;
+      release(ready);
     }
   }
 
-  private applyAtAgency(agency: string, event: SimEvent): void {
-    const ledger = this.ledgers.get(agency);
-    if (!ledger) return;
-    let incident = ledger.get(event.incident);
-    if (!incident) {
-      incident = { next: 1, buffered: new Map() };
-      ledger.set(event.incident, incident);
-    }
-    if (event.seq < incident.next || incident.buffered.has(event.seq)) {
-      this.stats.deduplicated += 1;
-      this.signals.push({ type: 'deduplicated', node: agency });
-      return;
-    }
-    incident.buffered.set(event.seq, event);
-    for (
-      let ready = incident.buffered.get(incident.next);
-      ready;
-      ready = incident.buffered.get(incident.next)
-    ) {
-      incident.buffered.delete(incident.next);
-      incident.next += 1;
-      this.unapplied.delete(ready.id);
-      this.stats.applied += 1;
-      this.signals.push({ type: 'applied', node: agency, event: ready });
-      this.onApply?.(agency, ready);
-    }
+  private answer(delivery: Delivery): void {
+    const { target, envelope } = delivery;
+    const key = `${envelope.incident}:${target}`;
+    const seq = (this.nextReplySeq.get(key) ?? 0) + 1;
+    this.nextReplySeq.set(key, seq);
+    this.submit({
+      id: this.nextEnvelopeId++,
+      incident: envelope.incident,
+      seq,
+      from: target,
+      agency: envelope.agency,
+      direction: 'return',
+    });
   }
 
   private emit(): void {
-    for (const source of this.sources) {
-      if (!source.up || this.random() > this.config.emitRate) continue;
-      const event = this.nextEvent(source.id);
-      this.unapplied.add(event.id);
+    for (const agency of this.agencies) {
+      if (!agency.up || this.random() > this.config.emitRate) continue;
+      const open = this.incidents.get(agency.id) ?? [];
+      while (open.length < OPEN_INCIDENTS_PER_AGENCY) {
+        open.push({
+          id: this.nextIncidentId++,
+          nextSeq: 1,
+          remaining: 3 + Math.floor(this.random() * 6),
+        });
+      }
+      const index = Math.floor(this.random() * open.length);
+      const incident = open[index] as Incident;
       this.stats.emitted += 1;
-      this.sourcePending.get(source.id)?.set(event.id, {
-        event,
-        nextAttempt: this.tick + this.delay(0),
-        attempts: 0,
-      });
-      this.send(event, 'commit', source.id, OUTBOX);
-    }
-  }
-
-  private nextEvent(source: string): SimEvent {
-    const open = this.incidents.get(source) ?? [];
-    while (open.length < OPEN_INCIDENTS_PER_SOURCE) {
-      const agency = this.pick(this.agencies);
-      open.push({
-        id: this.nextIncidentId++,
+      this.submit({
+        id: this.nextEnvelopeId++,
+        incident: incident.id,
+        seq: incident.nextSeq++,
+        from: agency.id,
         agency: agency.id,
-        nextSeq: 1,
-        remaining: 3 + Math.floor(this.random() * 6),
+        direction: 'inbound',
       });
+      incident.remaining -= 1;
+      if (incident.remaining <= 0) open.splice(index, 1);
     }
-    const index = Math.floor(this.random() * open.length);
-    const incident = open[index] as Incident;
-    const event: SimEvent = {
-      id: this.nextEventId++,
-      incident: incident.id,
-      seq: incident.nextSeq++,
-      source,
-      agency: incident.agency,
-    };
-    incident.remaining -= 1;
-    if (incident.remaining <= 0) open.splice(index, 1);
-    return event;
   }
 
-  private retrySources(): void {
-    for (const source of this.sources) {
-      if (!source.up) continue;
-      for (const pending of this.sourcePending.get(source.id)?.values() ?? []) {
-        if (pending.nextAttempt > this.tick) continue;
-        pending.attempts += 1;
-        pending.nextAttempt = this.tick + this.delay(pending.attempts);
+  private submit(envelope: Envelope): void {
+    this.unreleased.add(envelope.id);
+    this.pending.get(envelope.from)?.set(envelope.id, {
+      item: envelope,
+      nextAttempt: this.tick + this.delay(0),
+      attempts: 0,
+    });
+    this.launchSubmit(envelope, false);
+  }
+
+  private launchSubmit(envelope: Envelope, retry: boolean): void {
+    const via = envelope.direction === 'inbound' ? 'ingest' : 'translate';
+    this.launch({
+      kind: 'submit',
+      direction: envelope.direction,
+      route: [envelope.from, via, STORE],
+      hop: 0,
+      retry,
+      envelope,
+    });
+  }
+
+  private retrySenders(): void {
+    for (const [sender, queue] of this.pending) {
+      if (!this.nodes.get(sender)?.up) continue;
+      for (const attempt of queue.values()) {
+        if (attempt.nextAttempt > this.tick) continue;
+        attempt.attempts += 1;
+        attempt.nextAttempt = this.tick + this.delay(attempt.attempts);
         this.stats.retried += 1;
-        this.send(pending.event, 'commit', source.id, OUTBOX, { retry: true });
+        this.launchSubmit(attempt.item, true);
       }
     }
   }
 
-  private publishFromOutbox(): void {
-    if (!this.nodes.get(OUTBOX)?.up) return;
-    const relays = this.relays.filter((relay) => relay.up);
-    if (relays.length === 0) return;
+  private publish(): void {
+    if (!this.nodes.get(STORE)?.up) return;
     let budget = this.config.publishRate;
-    for (const row of this.outboxRows.values()) {
+    for (const row of this.rows.values()) {
       if (budget === 0) return;
       if (row.nextAttempt > this.tick) continue;
       const retry = row.attempts > 0;
       if (retry) this.stats.retried += 1;
       row.attempts += 1;
       row.nextAttempt = this.tick + this.delay(row.attempts);
-      this.send(row.event, 'publish', OUTBOX, this.pick(relays).id, { retry });
+      const delivery = row.item;
+      const via = delivery.envelope.direction === 'inbound' ? 'translate' : 'ingest';
+      this.launch({
+        kind: 'deliver',
+        direction: delivery.envelope.direction,
+        route: [STORE, via, delivery.target],
+        hop: 0,
+        retry,
+        envelope: delivery.envelope,
+        delivery,
+      });
       budget -= 1;
     }
   }
 
-  private send(
-    event: SimEvent,
-    kind: PacketKind,
-    from: string,
-    to: string,
-    options: { retry?: boolean; relay?: string } = {},
-  ): void {
+  private launch(packet: Omit<Packet, 'from' | 'to' | 'departed' | 'arrives'>): void {
     const [low, high] = this.config.latency;
     this.packets.push({
-      event,
-      kind,
-      from,
-      to,
+      ...packet,
+      from: packet.route[packet.hop] as string,
+      to: packet.route[packet.hop + 1] as string,
       departed: this.tick,
       arrives: this.tick + low + Math.floor(this.random() * (high - low + 1)),
-      retry: options.retry ?? false,
-      ...(options.relay ? { relay: options.relay } : {}),
     });
   }
 
@@ -385,9 +469,5 @@ export class Simulation {
     const { retryBase, retryCap } = this.config;
     const backoff = Math.min(retryBase * 2 ** attempts, retryCap);
     return Math.round(backoff * (0.8 + this.random() * 0.4));
-  }
-
-  private pick<T>(items: readonly T[]): T {
-    return items[Math.floor(this.random() * items.length)] as T;
   }
 }

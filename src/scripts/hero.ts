@@ -1,13 +1,16 @@
 import { gsap } from 'gsap';
-import { Simulation, TOPOLOGY } from '../sim/engine';
+import { type SimSignal, Simulation, TOPOLOGY } from '../sim/engine';
 import { NetworkView } from './network-view';
+import { describeTranslation } from './translation-sample';
 
 const TICK_MS = 1000 / 60;
 const MAX_STEPS_PER_FRAME = 4;
 const AUTO_HEAL_MS = 11_000;
 const FIRST_DRILL_MS = 6_000;
-const DRILL_INTERVAL_MS = 15_000;
+const DRILL_INTERVAL_MS = 13_000;
 const DRILL_LENGTH_MS = 4_500;
+const TRANSLATION_INTERVAL_MS = 1_300;
+const DRILLS = ['translate', 'route:product-b', 'store', 'product-c', 'ingest', 'route:product-a'];
 
 const number = new Intl.NumberFormat('en-US');
 
@@ -16,15 +19,18 @@ export function startHero(): void {
   const status = document.querySelector<HTMLElement>('#sim-status');
   const toggle = document.querySelector<HTMLButtonElement>('#sim-toggle');
   const hero = document.querySelector<HTMLElement>('#top');
+  const translation = document.querySelector<HTMLElement>('#translation');
   const buttons = [...document.querySelectorAll<HTMLButtonElement>('[data-node]')];
-  if (!canvas || !status || !toggle || !hero) return;
+  const switches = [...document.querySelectorAll<HTMLButtonElement>('[data-route]')];
+  if (!canvas || !status || !toggle || !hero || !translation) return;
 
   const reducedMotion = !document.documentElement.classList.contains('motion');
   const sim = new Simulation({ seed: Math.floor(Math.random() * 2 ** 31) });
   const view = new NetworkView(canvas, buttons, sim);
   const healAt = new Map<string, number>();
   const outputs = {
-    applied: document.querySelector('#stat-applied'),
+    delivered: document.querySelector('#stat-delivered'),
+    returned: document.querySelector('#stat-returned'),
     retried: document.querySelector('#stat-retried'),
     deduplicated: document.querySelector('#stat-deduplicated'),
     lost: document.querySelector('#stat-lost'),
@@ -37,6 +43,8 @@ export function startHero(): void {
   let accumulator = 0;
   let last = performance.now();
   let lastCounters = 0;
+  let lastTranslation = 0;
+  let drillIndex = 0;
 
   const say = (message: string) => {
     status.textContent = message;
@@ -69,9 +77,28 @@ export function startHero(): void {
       touched = true;
       const wasUp = button.getAttribute('aria-pressed') !== 'true';
       const { label, down } = setNode(button, !wasUp);
-      if (down === TOPOLOGY.length) say('Everything is down. Every event is still held.');
+      if (down === TOPOLOGY.length) say('Everything is down. Every message is still held.');
       else if (wasUp) say(`${label} is down. Nothing gets dropped. Watch the retries.`);
       else say(`${label} is back. The backlog is draining.`);
+    });
+  }
+
+  const setRoute = (button: HTMLButtonElement, on: boolean) => {
+    sim.setRouting(button.dataset.route ?? '', on);
+    button.setAttribute('aria-checked', String(on));
+    return button.dataset.label ?? '';
+  };
+
+  for (const button of switches) {
+    button.addEventListener('click', () => {
+      touched = true;
+      const on = button.getAttribute('aria-checked') !== 'true';
+      const label = setRoute(button, on);
+      say(
+        on
+          ? `${label} is routed again. New messages reach it from here on.`
+          : `${label} is switched off. Nothing failed, it just stops receiving.`,
+      );
     });
   }
 
@@ -89,27 +116,53 @@ export function startHero(): void {
   const runDrill = (now: number) => {
     if (touched || now < nextDrill || paused) return;
     nextDrill = now + DRILL_INTERVAL_MS;
-    const candidates = buttons.filter((button) => !button.classList.contains('source'));
-    const target = candidates[Math.floor(Math.random() * candidates.length)];
+    const drill = DRILLS[drillIndex % DRILLS.length] ?? '';
+    drillIndex += 1;
+
+    if (drill.startsWith('route:')) {
+      const target = switches.find((button) => `route:${button.dataset.route}` === drill);
+      if (!target) return;
+      const label = setRoute(target, false);
+      say(`Routing change: ${label} switched off. The others keep receiving.`);
+      window.setTimeout(() => {
+        if (touched) return;
+        setRoute(target, true);
+        say(`${label} is routed again. Your turn: flip a switch or take a node down.`);
+      }, DRILL_LENGTH_MS);
+      return;
+    }
+
+    const target = buttons.find((button) => button.dataset.node === drill);
     if (!target) return;
     const { label } = setNode(target, false);
     say(`Failure drill: ${label} just went down. Nobody touched it.`);
     window.setTimeout(() => {
       if (touched) return;
       setNode(target, true);
-      say(`${label} is back. The backlog is draining. Your turn: take one down.`);
+      say(`${label} is back and the backlog is draining. Your turn: take one down.`);
     }, DRILL_LENGTH_MS);
   };
 
   const renderCounters = (now: number) => {
     if (now - lastCounters < 120) return;
     lastCounters = now;
-    if (outputs.applied) outputs.applied.textContent = number.format(sim.stats.applied);
+    if (outputs.delivered) outputs.delivered.textContent = number.format(sim.stats.delivered);
+    if (outputs.returned) outputs.returned.textContent = number.format(sim.stats.returned);
     if (outputs.retried) outputs.retried.textContent = number.format(sim.stats.retried);
     if (outputs.deduplicated) {
       outputs.deduplicated.textContent = number.format(sim.stats.deduplicated);
     }
     if (outputs.lost) outputs.lost.textContent = number.format(sim.lost());
+  };
+
+  const showTranslation = (signals: readonly SimSignal[], now: number) => {
+    if (now - lastTranslation < TRANSLATION_INTERVAL_MS) return;
+    for (const signal of signals) {
+      if (signal.type !== 'stored') continue;
+      lastTranslation = now;
+      translation.innerHTML = describeTranslation(signal.envelope, signal.targets);
+      return;
+    }
   };
 
   const frame = (now: number) => {
@@ -120,7 +173,9 @@ export function startHero(): void {
         accumulator += elapsed;
         let steps = 0;
         while (accumulator >= TICK_MS && steps < MAX_STEPS_PER_FRAME) {
-          view.absorb(sim.step());
+          const signals = sim.step();
+          view.absorb(signals);
+          showTranslation(signals, now);
           accumulator -= TICK_MS;
           steps += 1;
         }

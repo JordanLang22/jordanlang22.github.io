@@ -13,33 +13,42 @@ interface Shock extends Point {
 
 const BONE = '233, 228, 216';
 const FLARE = '255, 91, 31';
-const TRAIL_LENGTH = 0.11;
+const ANSWER = '143, 211, 199';
+const DIM = '143, 152, 146';
+const TRAIL_LENGTH = 0.14;
 const TRAIL_SAMPLES = 7;
+const LANE_OFFSET = 3.5;
 const SHOCK_FRAMES = 34;
+const DROP_SHOCK_SPACING = 26;
+const HUB_PADDING = 44;
 const LINKS: readonly (readonly [string, string])[] = [
-  ['cad', 'outbox'],
-  ['phones', 'outbox'],
-  ['radio', 'outbox'],
-  ['outbox', 'relay-a'],
-  ['outbox', 'relay-b'],
-  ['relay-a', 'agency-1'],
-  ['relay-a', 'agency-2'],
-  ['relay-a', 'agency-3'],
-  ['relay-b', 'agency-1'],
-  ['relay-b', 'agency-2'],
-  ['relay-b', 'agency-3'],
+  ['cad', 'ingest'],
+  ['phones', 'ingest'],
+  ['radio', 'ingest'],
+  ['ingest', 'store'],
+  ['store', 'translate'],
+  ['translate', 'product-a'],
+  ['translate', 'product-b'],
+  ['translate', 'product-c'],
 ];
+const PRODUCT_SHAPES: Readonly<Record<string, Shape>> = {
+  'product-a': 'circle',
+  'product-b': 'diamond',
+  'product-c': 'triangle',
+};
+
+type Shape = 'square' | 'circle' | 'diamond' | 'triangle';
 
 const linkKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
 
-function curvePoint(from: Point, to: Point, t: number): Point {
+function curvePoint(from: Point, to: Point, t: number, lane: number): Point {
   const span = (to.x - from.x) * 0.5;
   const c1 = from.x + span;
   const c2 = to.x - span;
   const u = 1 - t;
   return {
     x: u * u * u * from.x + 3 * u * u * t * c1 + 3 * u * t * t * c2 + t * t * t * to.x,
-    y: u * u * u * from.y + 3 * u * u * t * from.y + 3 * u * t * t * to.y + t * t * t * to.y,
+    y: u * u * u * from.y + 3 * u * u * t * from.y + 3 * u * t * t * to.y + t * t * t * to.y + lane,
   };
 }
 
@@ -48,6 +57,7 @@ export class NetworkView {
   private readonly context: CanvasRenderingContext2D;
   private readonly anchors = new Map<string, Point>();
   private readonly heat = new Map<string, number>();
+  private readonly lastDrop = new Map<string, number>();
   private shocks: Shock[] = [];
   private width = 0;
   private height = 0;
@@ -86,14 +96,15 @@ export class NetworkView {
       const anchor = this.anchors.get(signal.node);
       if (!anchor) continue;
       if (signal.type === 'dropped') {
+        const previous = this.lastDrop.get(signal.node) ?? -Infinity;
+        if (this.sim.tick - previous < DROP_SHOCK_SPACING) continue;
+        this.lastDrop.set(signal.node, this.sim.tick);
         this.shocks.push({ ...anchor, age: 0, colour: FLARE, reach: 44 });
-      } else {
-        this.shocks.push({
-          ...anchor,
-          age: 0,
-          colour: signal.type === 'applied' ? BONE : FLARE,
-          reach: 22,
-        });
+      } else if (signal.type === 'applied') {
+        const returned = signal.delivery.envelope.direction === 'return';
+        this.shocks.push({ ...anchor, age: 0, colour: returned ? ANSWER : BONE, reach: 22 });
+      } else if (signal.type === 'deduplicated') {
+        this.shocks.push({ ...anchor, age: 0, colour: FLARE, reach: 22 });
       }
     }
   }
@@ -101,10 +112,31 @@ export class NetworkView {
   draw(fraction: number): void {
     const { context, sim } = this;
     context.clearRect(0, 0, this.width, this.height);
+    this.drawHub();
     this.drawLinks();
     for (const packet of sim.packets) this.drawPacket(packet, fraction);
     this.drawBacklog();
     this.drawShocks();
+  }
+
+  private drawHub(): void {
+    const { context } = this;
+    const ingest = this.anchors.get('ingest');
+    const translate = this.anchors.get('translate');
+    if (!ingest || !translate) return;
+    const left = ingest.x - HUB_PADDING;
+    const top = ingest.y - HUB_PADDING - 14;
+    const width = translate.x - ingest.x + HUB_PADDING * 2;
+    const height = (HUB_PADDING + 14) * 2;
+    context.setLineDash([2, 5]);
+    context.lineWidth = 1;
+    context.strokeStyle = `rgba(${DIM}, 0.5)`;
+    context.strokeRect(left, top, width, height);
+    context.setLineDash([]);
+    context.fillStyle = `rgb(${DIM})`;
+    context.font = "11px 'JetBrains Mono Variable', monospace";
+    context.textAlign = 'left';
+    context.fillText('Data connections hub', left, top - 6);
   }
 
   private drawLinks(): void {
@@ -117,15 +149,16 @@ export class NetworkView {
       const heat = (this.heat.get(key) ?? 0) * 0.94;
       this.heat.set(key, heat);
       const severed = !sim.nodes.get(a)?.up || !sim.nodes.get(b)?.up;
+      const unrouted = sim.routing.get(b) === false;
+      const span = (to.x - from.x) * 0.5;
       context.beginPath();
       context.moveTo(from.x, from.y);
-      const span = (to.x - from.x) * 0.5;
       context.bezierCurveTo(from.x + span, from.y, to.x - span, to.y, to.x, to.y);
-      context.setLineDash(severed ? [3, 6] : []);
+      context.setLineDash(severed ? [3, 6] : unrouted ? [1, 7] : []);
       context.lineWidth = 1;
-      context.strokeStyle = severed
-        ? `rgba(${FLARE}, 0.45)`
-        : `rgba(${BONE}, ${(0.14 + Math.min(heat, 1) * 0.3).toFixed(3)})`;
+      if (severed) context.strokeStyle = `rgba(${FLARE}, 0.45)`;
+      else if (unrouted) context.strokeStyle = `rgba(${DIM}, 0.4)`;
+      else context.strokeStyle = `rgba(${BONE}, ${(0.13 + Math.min(heat, 1) * 0.28).toFixed(3)})`;
       context.stroke();
     }
     context.setLineDash([]);
@@ -137,38 +170,64 @@ export class NetworkView {
     const to = this.anchors.get(packet.to);
     if (!from || !to) return;
     const key = linkKey(packet.from, packet.to);
-    this.heat.set(key, (this.heat.get(key) ?? 0) + 0.04);
+    this.heat.set(key, (this.heat.get(key) ?? 0) + 0.03);
 
     const span = packet.arrives - packet.departed;
     const progress = Math.min(1, (sim.tick + fraction - packet.departed) / span);
     const eased = progress * progress * (3 - 2 * progress);
-    const acknowledgement =
-      packet.kind === 'ack' || packet.kind === 'ack-relay' || packet.kind === 'commit-ack';
-    const colour = packet.retry ? FLARE : BONE;
-    const baseAlpha = acknowledgement ? 0.28 : 1;
+    const acknowledgement = packet.kind === 'submit-ack' || packet.kind === 'deliver-ack';
+    const lane = to.x > from.x ? -LANE_OFFSET : LANE_OFFSET;
+    const colour = packet.retry ? FLARE : packet.direction === 'return' ? ANSWER : BONE;
+    const baseAlpha = acknowledgement ? 0.24 : 1;
 
     context.lineWidth = acknowledgement ? 1 : 1.5;
-    let previous = curvePoint(from, to, Math.max(0, eased - TRAIL_LENGTH));
+    let previous = curvePoint(from, to, Math.max(0, eased - TRAIL_LENGTH), lane);
     for (let sample = 1; sample <= TRAIL_SAMPLES; sample += 1) {
       const t = Math.max(0, eased - TRAIL_LENGTH * (1 - sample / TRAIL_SAMPLES));
-      const point = curvePoint(from, to, t);
-      context.strokeStyle = `rgba(${colour}, ${((sample / TRAIL_SAMPLES) * baseAlpha * 0.9).toFixed(3)})`;
+      const point = curvePoint(from, to, t, lane);
+      context.strokeStyle = `rgba(${colour}, ${((sample / TRAIL_SAMPLES) * baseAlpha * 0.85).toFixed(3)})`;
       context.beginPath();
       context.moveTo(previous.x, previous.y);
       context.lineTo(point.x, point.y);
       context.stroke();
       previous = point;
     }
-    const size = acknowledgement ? 2 : 3.5;
+
     context.fillStyle = `rgba(${colour}, ${baseAlpha})`;
-    context.fillRect(previous.x - size / 2, previous.y - size / 2, size, size);
+    if (acknowledgement) {
+      context.fillRect(previous.x - 1, previous.y - 1, 2, 2);
+    } else {
+      // Past the translate station a message is in that product's format, so it changes shape.
+      const product = PRODUCT_SHAPES[packet.to] ?? PRODUCT_SHAPES[packet.from];
+      this.fillShape(product ?? 'square', previous);
+    }
+  }
+
+  private fillShape(shape: Shape, { x, y }: Point): void {
+    const { context } = this;
+    context.beginPath();
+    if (shape === 'square') {
+      context.rect(x - 2, y - 2, 4, 4);
+    } else if (shape === 'circle') {
+      context.arc(x, y, 3.2, 0, Math.PI * 2);
+    } else if (shape === 'diamond') {
+      context.moveTo(x, y - 4.2);
+      context.lineTo(x + 4.2, y);
+      context.lineTo(x, y + 4.2);
+      context.lineTo(x - 4.2, y);
+    } else {
+      context.moveTo(x, y - 4.2);
+      context.lineTo(x + 4.2, y + 3.2);
+      context.lineTo(x - 4.2, y + 3.2);
+    }
+    context.fill();
   }
 
   private drawBacklog(): void {
     const { context, sim } = this;
-    const anchor = this.anchors.get('outbox');
+    const anchor = this.anchors.get('store');
     if (!anchor) return;
-    const held = Math.min(sim.outboxDepth, 72);
+    const held = Math.min(sim.storeDepth, 72);
     context.fillStyle = `rgb(${FLARE})`;
     for (let index = 0; index < held; index += 1) {
       const column = index % 18;

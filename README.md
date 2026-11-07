@@ -5,16 +5,26 @@ My portfolio. The headline claims that software can keep its word, so the page h
 ## The simulation is real
 
 The system at the top of the page isn't an animation. [`src/sim/engine.ts`](src/sim/engine.ts) is a
-deterministic model of a transactional outbox: at-least-once delivery, lost packets, exponential
-backoff with jitter, idempotent consumers, and per-incident ordering. The canvas only draws its
+deterministic model of a two-way integration hub. Agency systems send messages in. The hub stores
+them, translates them for each product with routing switched on, and carries any answers back to
+the agency system that opened the incident. Any hop can lose any packet. The canvas only draws this
 state, and the Lost counter is computed from that state rather than hard-coded to zero.
 
 [`src/sim/engine.test.ts`](src/sim/engine.test.ts) uses fast-check to throw hundreds of random
-failure schedules at it on every push and asserts three invariants:
+schedules of failures and routing changes at it on every push, and asserts that:
 
-1. No event is ever lost, at any tick.
-2. Every event is applied exactly once.
-3. Every incident is applied in order.
+1. No message is ever lost, in either direction, at any tick.
+2. Every delivery is applied exactly once.
+3. Every stream is applied in order.
+4. Every answer returns to the system that opened the incident.
+
+## The numbers measure themselves
+
+Commits, pull requests, and lines of code aren't typed in.
+[`scripts/snapshot-github.mjs`](scripts/snapshot-github.mjs) measures them across my repositories
+every day, and the site rebuilds with the result. It counts the commits inside squash-merged pull
+requests, refuses a result that looks like lost access, and keeps repository names out of its output
+and its public logs. If a refresh fails, the site keeps its last good numbers.
 
 ## Redaction is structural
 

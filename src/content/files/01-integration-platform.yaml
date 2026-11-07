@@ -4,10 +4,10 @@ organisation: GovWorx
 kicker: Public safety data hub
 stamp: In service
 meta:
-  - { label: Role, value: Primary engineer and technical owner }
-  - { label: Since, value: February 2026 }
-  - { label: Build, value: Greenfield }
-  - { label: Connectors, value: 60+ in production }
+  - { label: Role, value: "Primary engineer and technical owner" }
+  - { label: Since, value: "February 2026" }
+  - { label: Build, value: "Greenfield" }
+  - { label: Connectors, value: "60+ in production" }
 stack: C#/.NET, MySQL, React, TypeScript, AWS ECS, Terraform
 summary: >-
   Emergency systems don't share a language. I don't make the CAD. I designed and built the hub that

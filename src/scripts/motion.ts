@@ -12,6 +12,7 @@ export function startMotion(): void {
   raiseRows('[data-order]');
   raiseRows('[data-log-row]');
   scanHeatmap();
+  countUp();
   hideNavAtContact();
 
   // Fonts change layout, and every trigger above measures layout.
@@ -149,6 +150,23 @@ function raiseRows(selector: string): void {
       duration: 0.6,
       ease: 'power3.out',
       scrollTrigger: { trigger: row, start: 'top 92%', once: true },
+    });
+  }
+}
+
+function countUp(): void {
+  const format = new Intl.NumberFormat('en-US');
+  for (const output of document.querySelectorAll<HTMLElement>('[data-count]')) {
+    const target = Number(output.dataset.count);
+    const counter = { value: 0 };
+    gsap.to(counter, {
+      value: target,
+      duration: 1.5,
+      ease: 'power3.out',
+      scrollTrigger: { trigger: output, start: 'top 90%', once: true },
+      onUpdate: () => {
+        output.textContent = format.format(Math.round(counter.value));
+      },
     });
   }
 }

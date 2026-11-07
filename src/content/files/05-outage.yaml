@@ -4,10 +4,10 @@ organisation: NxEdge
 kicker: Incident command, July 2024
 stamp: Resolved
 meta:
-  - { label: Role, value: Sole IT operations, recovery lead }
-  - { label: Sites, value: 5 semiconductor plants }
-  - { label: Users, value: 200+ }
-  - { label: Production lost, value: None }
+  - { label: Role, value: "Sole IT operations, recovery lead" }
+  - { label: Sites, value: "5 semiconductor plants" }
+  - { label: Users, value: "200+" }
+  - { label: Production lost, value: "None" }
 stack: Intune, SCCM, PowerShell, Windows, incident response
 summary: >-
   When the global CrowdStrike outage hit, I built the recovery plan and restored

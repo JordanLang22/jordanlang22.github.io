@@ -1,26 +1,56 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import activity from '../src/data/activity.json' with { type: 'json' };
 
 const count = async (locator: import('@playwright/test').Locator) =>
   Number((await locator.textContent())?.replaceAll(',', ''));
 
-test('the live system keeps delivering through a failure and loses nothing', async ({ page }) => {
+test('the hub keeps delivering through a failure and loses nothing', async ({ page }) => {
   await page.goto('/');
-  const relay = page.locator('[data-node="relay-a"]');
+  const translate = page.locator('[data-node="translate"]');
   await expect(page.locator('#hero-title')).toHaveAccessibleName('Software that keeps its word');
-  await expect.poll(() => count(page.locator('#stat-applied'))).toBeGreaterThan(0);
+  await expect.poll(() => count(page.locator('#stat-delivered'))).toBeGreaterThan(0);
 
-  await relay.click();
-  await expect(relay).toHaveAttribute('aria-pressed', 'true');
-  await expect(page.locator('#sim-status')).toContainText('Relay A is down');
-
-  const before = await count(page.locator('#stat-applied'));
-  await expect.poll(() => count(page.locator('#stat-applied'))).toBeGreaterThan(before);
+  await translate.click();
+  await expect(translate).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#sim-status')).toContainText('Translate is down');
   await expect(page.locator('#stat-lost')).toHaveText('0');
 
-  await relay.click();
-  await expect(relay).toHaveAttribute('aria-pressed', 'false');
+  await translate.click();
+  await expect(translate).toHaveAttribute('aria-pressed', 'false');
+  const before = await count(page.locator('#stat-delivered'));
+  await expect.poll(() => count(page.locator('#stat-delivered'))).toBeGreaterThan(before);
+  await expect(page.locator('#stat-lost')).toHaveText('0');
 });
+
+test('products answer, and the answers come back', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(() => count(page.locator('#stat-returned'))).toBeGreaterThan(0);
+});
+
+test('a product can be switched off without anything failing', async ({ page }) => {
+  await page.goto('/');
+  const route = page.getByRole('switch', { name: 'Route messages to Product B' });
+  await expect(route).toBeChecked();
+  await route.click();
+  await expect(route).not.toBeChecked();
+  await expect(page.locator('#sim-status')).toContainText('Nothing failed');
+  await expect(page.locator('#stat-lost')).toHaveText('0');
+});
+
+for (const [subject, key] of [
+  ['Dendrition', 'dendrition'],
+  ['KestrelTrader', 'kestrel'],
+  ['ShieldHome', 'shieldhome'],
+] as const) {
+  test(`${subject} shows its measured commit count`, async ({ page }) => {
+    await page.goto('/');
+    const file = page.locator('[data-file]').filter({ hasText: subject });
+    const commits = activity.projects[key].commits.toLocaleString('en-US');
+    await expect(file.locator('dd').filter({ hasText: new RegExp(`^${commits}$`) })).toHaveCount(1);
+    await expect(file).not.toContainText(`$${key}`);
+  });
+}
 
 test('sealed bars contain no content', async ({ page }) => {
   await page.goto('/');
@@ -54,9 +84,9 @@ test.describe('with reduced motion', () => {
     await expect(page.locator('html')).not.toHaveClass(/motion/);
     await expect(page.locator('#sim-toggle')).toHaveText('Run');
     await expect(page.locator('#hero-title .char').first()).toBeVisible();
-    const held = await page.locator('#stat-applied').textContent();
+    const held = await page.locator('#stat-delivered').textContent();
     await page.waitForTimeout(500);
-    await expect(page.locator('#stat-applied')).toHaveText(held ?? '');
+    await expect(page.locator('#stat-delivered')).toHaveText(held ?? '');
   });
 
   test('has no serious accessibility violations', async ({ page }) => {

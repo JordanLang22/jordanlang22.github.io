@@ -4,9 +4,11 @@ organisation: Independent
 kicker: Native TV launcher and home server
 stamp: Confirmed
 meta:
-  - { label: Role, value: Sole engineer }
-  - { label: Built, value: 51 commits in two weeks }
-  - { label: Modules, value: 3 Gradle modules }
+  - { label: Role, value: "Sole engineer" }
+  - { label: Since, value: "October 2026" }
+  - { label: Commits, value: "$shieldhome.commits" }
+  - { label: Code, value: "$shieldhome.lines lines" }
+  - { label: Modules, value: "3 Gradle modules" }
   - { label: Tests, value: "247" }
 stack: Kotlin 2.2, Compose for TV, Room, Ktor 3, SQLite, Docker
 summary: >-

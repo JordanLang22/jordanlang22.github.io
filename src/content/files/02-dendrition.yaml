@@ -5,11 +5,13 @@ kicker: Multi-tenant SaaS, live in production
 stamp: Live
 link: { label: dendrition.com, href: "https://dendrition.com" }
 meta:
-  - { label: Role, value: Co-founder, sole engineer }
-  - { label: Since, value: June 2026 }
-  - { label: Commits, value: "693" }
-  - { label: Schema, value: 63 models, 60 migrations }
-  - { label: Tests, value: 230 files, 29 browser specs }
+  - { label: Role, value: "Co-founder, sole engineer" }
+  - { label: Since, value: "June 2026" }
+  - { label: Commits, value: "$dendrition.commits" }
+  - { label: Pull requests, value: "$dendrition.pullRequests merged" }
+  - { label: Code, value: "$dendrition.lines lines" }
+  - { label: Schema, value: "63 models, 60 migrations" }
+  - { label: Tests, value: "230 files, 29 browser specs" }
 stack: Next.js 16, React 19, TypeScript, Prisma, Postgres, Better Auth, Stripe, Mux, Vercel
 summary: >-
   A private video library for jiu-jitsu academies. Owners publish programs, and members get access

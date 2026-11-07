@@ -1,20 +1,20 @@
 order: 3
 subject: KestrelTrader
 organisation: Independent
-kicker: Autonomous trading runtime
+kicker: Autonomous futures trading runtime
 stamp: Fail closed
 meta:
-  - { label: Role, value: Sole engineer }
-  - { label: Since, value: March 2026 }
-  - { label: Commits, value: "1,096" }
-  - { label: Code, value: 51k production, 63k test }
+  - { label: Role, value: "Sole engineer" }
+  - { label: Since, value: "March 2026" }
+  - { label: Commits, value: "$kestrel.commits" }
+  - { label: Code, value: "$kestrel.productionLines production, $kestrel.testLines test" }
   - { label: Tests, value: "1,093" }
   - { label: Releases, value: "21" }
 stack: .NET 10, C#, SignalR, OpenTelemetry, Svelte 5, TypeScript
 summary: >-
   The strategy is the least interesting part of this file. The engineering problem is what happens
   when the software and the broker disagree, and [[the answer has to be safe every time]].
-  Market: {{9|Market and instrument}}. Strategy: {{16|Strategy}}. Risk limits:
+  Markets: [[equity index futures, including MNQ, NQ, and M2K]]. Strategy: {{16|Strategy}}. Risk limits:
   {{10|Risk limits}}. Results: {{11|Results}}.
 findings:
   - title: The broker is the only truth

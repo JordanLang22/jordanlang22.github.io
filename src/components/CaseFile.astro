@@ -1,5 +1,7 @@
 ---
 import type { CollectionEntry } from 'astro:content';
+import activity from '../data/activity.json';
+import { fillStats } from '../lib/stats';
 import Redacted from './Redacted.astro';
 
 interface Props {
@@ -32,7 +34,7 @@ const of = String(total).padStart(2, '0');
             meta.map(({ label, value }) => (
               <div>
                 <dt>{label}</dt>
-                <dd>{value}</dd>
+                <dd>{fillStats(value, activity.projects)}</dd>
               </div>
             ))
           }

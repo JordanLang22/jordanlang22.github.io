@@ -11,7 +11,8 @@ const files = defineCollection({
     kicker: z.string(),
     stamp: z.string().max(16),
     link: z.object({ label: z.string(), href: z.url() }).optional(),
-    meta: z.array(z.object({ label: z.string(), value: z.string() })).min(3),
+    // Strict, because an unquoted comma in YAML silently truncates a value into a stray key.
+    meta: z.array(z.strictObject({ label: z.string(), value: z.string() })).min(3),
     stack: z.string(),
     summary: z.string(),
     findings: z.array(z.object({ title: z.string(), body: z.string() })).min(2),

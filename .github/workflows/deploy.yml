@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '17 11 * * *'
   workflow_dispatch:
 
 permissions:
@@ -11,18 +13,34 @@ permissions:
 
 concurrency:
   group: pages-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
+      # A stale token or a GitHub outage must not stop the site, so this falls back to the last
+      # committed numbers. The token reaches this one step and nothing else.
+      - name: Measure live stats
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.STATS_TOKEN }}
+        run: |
+          if [ -n "$GH_TOKEN" ]; then
+            gh auth setup-git
+            npm run -s snapshot
+          else
+            echo 'No STATS_TOKEN set. Keeping the committed numbers.'
+          fi
       - run: npm run check
       - run: npm test
       - run: npm run build
@@ -34,6 +52,12 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: activity
+          path: src/data/activity.json
+          retention-days: 3
 
   deploy:
     if: github.event_name != 'pull_request'
@@ -48,3 +72,25 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  # Committing the numbers keeps a record, and GitHub pauses schedules on repositories that go quiet.
+  record:
+    if: github.event_name != 'pull_request'
+    needs: deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/download-artifact@v4
+        with:
+          name: activity
+          path: src/data
+      - run: |
+          git diff --quiet src/data/activity.json && exit 0
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -qam 'Refresh measured stats'
+          git push
