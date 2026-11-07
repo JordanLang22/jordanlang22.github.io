@@ -69,7 +69,7 @@ export const DEFAULT_CONFIG: SimConfig = {
 
 export const TOPOLOGY: readonly (Pick<SimNode, 'id' | 'kind'> & { label: string })[] = [
   { id: 'cad', kind: 'source', label: 'CAD' },
-  { id: 'voice', kind: 'source', label: 'Voice' },
+  { id: 'phones', kind: 'source', label: 'Phones' },
   { id: 'radio', kind: 'source', label: 'Radio' },
   { id: 'outbox', kind: 'outbox', label: 'Outbox' },
   { id: 'relay-a', kind: 'relay', label: 'Relay A' },

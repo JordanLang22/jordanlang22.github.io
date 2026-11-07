@@ -125,7 +125,8 @@ export const CAREER_LOG = [
     date: '2026-02',
     role: 'Full stack software engineer',
     org: 'GovWorx',
-    detail: 'Primary engineer and technical owner of the integration platform.',
+    detail:
+      'Primary engineer and technical owner of the platform carrying CAD, phone, and radio data between agencies and our products.',
   },
   {
     date: '2026-06',

@@ -10,10 +10,10 @@ meta:
   - { label: Connectors, value: 60+ in production }
 stack: C#/.NET, MySQL, React, TypeScript, AWS ECS, Terraform
 summary: >-
-  Emergency systems don't share a language. I designed and built the hub between
-  [[external public safety systems]] and the GovWorx product suite. Products speak one shared
-  contract, and the platform takes on each vendor's dialect and delivery. Vendors and customers:
-  {{18|Vendor and customer names}}.
+  Emergency systems don't share a language. I don't make the CAD. I designed and built the hub that
+  moves data in and out of it, along with [[911 and non-emergency phones and radio]], between
+  agencies and the GovWorx products. Products speak one shared contract, and the platform takes on
+  each vendor's dialect and delivery. Vendors and customers: {{18|Vendor and customer names}}.
 findings:
   - title: A commit and a delivery cannot disagree
     body: >-

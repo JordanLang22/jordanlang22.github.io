@@ -18,7 +18,7 @@ const TRAIL_SAMPLES = 7;
 const SHOCK_FRAMES = 34;
 const LINKS: readonly (readonly [string, string])[] = [
   ['cad', 'outbox'],
-  ['voice', 'outbox'],
+  ['phones', 'outbox'],
   ['radio', 'outbox'],
   ['outbox', 'relay-a'],
   ['outbox', 'relay-b'],
