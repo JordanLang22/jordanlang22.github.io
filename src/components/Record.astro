@@ -1,0 +1,240 @@
+---
+import { getCollection } from 'astro:content';
+import { ALSO_ON_FILE } from '../data/site';
+import CaseFile from './CaseFile.astro';
+
+const files = (await getCollection('files')).sort((a, b) => a.data.order - b.data.order);
+const barCount = 9;
+---
+
+<section class="record" id="record" aria-labelledby="record-title">
+  <div class="opening" data-opening>
+    <div class="opening-inner">
+      <p class="eyebrow">Most of my best work is private. So here is what can be said about it.</p>
+      <h2 id="record-title">The record</h2>
+      <div class="identity">
+        <img
+          src="/portrait.png"
+          width="360"
+          height="450"
+          alt="Dithered black and white portrait of Jordan Lang"
+          loading="lazy"
+        />
+        <dl>
+          <div><dt>Name</dt><dd>Jordan Lang</dd></div>
+          <div><dt>Occupation</dt><dd>Full stack software engineer</dd></div>
+          <div><dt>Prior</dt><dd>Police officer, Arizona</dd></div>
+          <div><dt>Location</dt><dd>Boise, Idaho</dd></div>
+          <div><dt>Handling</dt><dd>Hover a black bar. Some lift. Some don’t.</dd></div>
+        </dl>
+      </div>
+    </div>
+    <div class="bars" aria-hidden="true" data-bars>
+      {Array.from({ length: barCount }, () => <i></i>)}
+    </div>
+  </div>
+
+  {files.map((file) => <CaseFile file={file} total={files.length} />)}
+
+  <div class="also">
+    <div class="also-inner">
+      <h3>Also on file</h3>
+      <table>
+        <caption class="sr-only">Other projects</caption>
+        <thead class="sr-only">
+          <tr><th scope="col">Project</th><th scope="col">Summary</th><th scope="col">Stack</th><th scope="col">Status</th></tr>
+        </thead>
+        <tbody>
+          {
+            ALSO_ON_FILE.map((item) => (
+              <tr>
+                <th scope="row">
+                  {'href' in item ? <a href={item.href}>{item.name}</a> : item.name}
+                </th>
+                <td>{item.detail}</td>
+                <td class="stack">{item.stack}</td>
+                <td class="status">{item.status}</td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<style>
+  .record {
+    position: relative;
+    background: var(--paper);
+    color: var(--type);
+  }
+
+  .opening {
+    position: relative;
+    min-height: 100svh;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+    font-family: var(--typewriter);
+  }
+
+  .opening-inner {
+    width: 100%;
+    padding: 5rem var(--gutter) 2.5rem;
+  }
+
+  .eyebrow {
+    font-size: clamp(1rem, 1.6vw, 1.4rem);
+    max-width: 34em;
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: min(21vw, 42svh);
+    line-height: 1;
+    letter-spacing: -0.04em;
+    margin: 0.5rem 0 1.5rem -0.03em;
+  }
+
+  .identity {
+    display: flex;
+    gap: 1.5rem;
+    border-top: 1px solid var(--paper-line);
+    padding-top: 1rem;
+  }
+
+  .identity img {
+    width: clamp(6rem, 11vw, 9rem);
+    height: auto;
+    image-rendering: pixelated;
+    flex: none;
+  }
+
+  .identity dl {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1rem;
+    flex: 1;
+  }
+
+  dt {
+    font-size: 0.8125rem;
+    color: var(--type-soft);
+  }
+
+  dd {
+    line-height: 1.3;
+  }
+
+  .bars {
+    display: none;
+  }
+
+  :global(html.motion) .bars {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    grid-auto-rows: 1fr;
+    pointer-events: none;
+  }
+
+  .bars :global(i) {
+    display: block;
+    background: var(--ink);
+    transform-origin: right;
+    margin-bottom: -1px;
+  }
+
+  .also {
+    position: relative;
+    background: var(--paper);
+    font-family: var(--typewriter);
+    border-top: 1px solid var(--paper-line);
+    padding: clamp(3rem, 8vh, 5rem) var(--gutter) clamp(4rem, 10vh, 7rem);
+  }
+
+  h3 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    line-height: 1;
+    letter-spacing: -0.02em;
+    margin-bottom: 1.5rem;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  tr {
+    border-top: 1px solid rgb(20 20 18 / 25%);
+  }
+
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 0.7rem 1.5rem 0.6rem 0;
+    line-height: 1.35;
+  }
+
+  tbody th {
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  tbody th a {
+    text-underline-offset: 3px;
+  }
+
+  tbody th a:hover {
+    color: var(--stamp);
+  }
+
+  .stack {
+    color: var(--type-soft);
+  }
+
+  .status {
+    white-space: nowrap;
+    padding-right: 0;
+    text-align: right;
+  }
+
+  @media (max-width: 860px) {
+    .identity dl {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.35rem;
+    }
+
+    h2 {
+      font-size: 27vw;
+    }
+
+    tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      padding: 0.6rem 0;
+    }
+
+    th,
+    td {
+      padding: 0;
+    }
+
+    tbody td:nth-of-type(1),
+    .stack {
+      grid-column: 1 / -1;
+    }
+
+    .status {
+      grid-row: 1;
+      grid-column: 2;
+    }
+  }
+</style>

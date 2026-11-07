@@ -1,0 +1,37 @@
+---
+import Activity from '../components/Activity.astro';
+import Agents from '../components/Agents.astro';
+import CareerLog from '../components/CareerLog.astro';
+import Contact from '../components/Contact.astro';
+import Hero from '../components/Hero.astro';
+import Nav from '../components/Nav.astro';
+import Orders from '../components/Orders.astro';
+import Record from '../components/Record.astro';
+import Thesis from '../components/Thesis.astro';
+import Base from '../layouts/Base.astro';
+---
+
+<Base
+  title="Jordan Lang, full stack software engineer"
+  description="Full stack engineer in Boise building platforms, distributed systems, and software that holds up when something goes wrong. Former police officer."
+>
+  <Nav />
+  <main>
+    <Hero />
+    <Thesis />
+    <Record />
+    <Orders />
+    <CareerLog />
+    <Activity />
+    <Agents />
+  </main>
+  <Contact />
+</Base>
+
+<script>
+  import { startMotion } from '../scripts/motion';
+  import { startTooltips } from '../scripts/tooltips';
+
+  startMotion();
+  startTooltips();
+</script>

@@ -1,0 +1,35 @@
+order: 3
+subject: KestrelTrader
+organisation: Independent
+kicker: Autonomous trading runtime
+stamp: Fail closed
+meta:
+  - { label: Role, value: Sole engineer }
+  - { label: Since, value: March 2026 }
+  - { label: Commits, value: "1,096" }
+  - { label: Code, value: 51k production, 63k test }
+  - { label: Tests, value: "1,093" }
+  - { label: Releases, value: "21" }
+stack: .NET 10, C#, SignalR, OpenTelemetry, Svelte 5, TypeScript
+summary: >-
+  The strategy is the least interesting part of this file. The engineering problem is what happens
+  when the software and the broker disagree, and [[the answer has to be safe every time]].
+  Market: {{9|Market and instrument}}. Strategy: {{16|Strategy}}. Risk limits:
+  {{10|Risk limits}}. Results: {{11|Results}}.
+findings:
+  - title: The broker is the only truth
+    body: >-
+      No order action is assumed to have worked. Broker evidence is authoritative, orders map back
+      through request IDs, and [[ambiguity fails closed]].
+  - title: Losing protection stops everything
+    body: >-
+      A lost stop triggers an account-wide flatten, proof of flat, and a latched halt.
+  - title: One corridor, no I/O under lock
+    body: >-
+      Entry admission and trade lifecycle each run through a serialized corridor, and no I/O happens
+      under the state gate. Telemetry uses bounded channels, so it can't block trading.
+  - title: Updates that ask first
+    body: >-
+      An update agent preflights each candidate against a SHA-256 profile hash, a flat account, and
+      a matching pause. A later human pause always wins. State writes are atomic, and a restart
+      rebuilds safety state from scratch.

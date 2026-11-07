@@ -1,0 +1,131 @@
+---
+import { CAREER_LOG } from '../data/site';
+---
+
+<section class="log" id="log" aria-labelledby="log-title">
+  <h2 id="log-title" class="display">The log</h2>
+  <p class="intro">Append only. Nothing rewritten.</p>
+  <ol>
+    {
+      CAREER_LOG.map(({ date, role, org, detail }, index) => (
+        <li data-log-row>
+          <span class="seq">{String(index + 1).padStart(3, '0')}</span>
+          <time datetime={date}>{date}</time>
+          <div>
+            <h3>{role}</h3>
+            <p class="org">{org}</p>
+          </div>
+          <p class="detail">{detail}</p>
+        </li>
+      ))
+    }
+    <li class="now">
+      <span class="seq">{String(CAREER_LOG.length + 1).padStart(3, '0')}</span>
+      <span class="pending">Open to senior, lead, platform, and hands-on architecture work<i aria-hidden="true"></i></span>
+    </li>
+  </ol>
+</section>
+
+<style>
+  .log {
+    background: var(--ink);
+    padding: clamp(3rem, 8vh, 5rem) var(--gutter) clamp(5rem, 12vh, 8rem);
+  }
+
+  h2 {
+    font-size: clamp(3.5rem, 12vw, 12rem);
+  }
+
+  .intro {
+    color: var(--dim);
+    font-size: 0.875rem;
+    margin: 0.75rem 0 clamp(2rem, 6vh, 3.5rem);
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: 3.5rem 6rem minmax(0, 1.2fr) minmax(0, 1.5fr);
+    gap: 1.5rem;
+    padding: 0.8rem 0;
+    border-top: 1px solid var(--line);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .seq,
+  time,
+  .org {
+    color: var(--dim);
+  }
+
+  time {
+    font-variant-numeric: tabular-nums;
+  }
+
+  h3 {
+    font-size: 1rem;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+
+  .detail {
+    color: var(--bone);
+  }
+
+  .now {
+    grid-template-columns: 3.5rem minmax(0, 1fr);
+    color: var(--flare);
+  }
+
+  .now .seq {
+    color: var(--flare);
+  }
+
+  .pending i {
+    display: inline-block;
+    width: 0.6em;
+    height: 1em;
+    background: var(--flare);
+    margin-left: 0.4em;
+    vertical-align: -0.15em;
+    animation: blink 1.1s steps(1) infinite;
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .pending i {
+      animation: none;
+    }
+  }
+
+  @media (max-width: 860px) {
+    li {
+      grid-template-columns: 2.5rem minmax(0, 1fr);
+      gap: 0.1rem 0.75rem;
+    }
+
+    time {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    li > div,
+    .detail {
+      grid-column: 2;
+    }
+
+    .now {
+      grid-template-columns: 2.5rem minmax(0, 1fr);
+    }
+
+    .pending {
+      grid-column: 2;
+      grid-row: 1;
+    }
+  }
+</style>

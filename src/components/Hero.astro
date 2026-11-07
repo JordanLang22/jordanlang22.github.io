@@ -1,0 +1,342 @@
+---
+import { LINKS } from '../data/site';
+import { TOPOLOGY } from '../sim/engine';
+
+const lines = ['Software that', 'keeps its word'];
+
+const place: Record<string, [number, number]> = {
+  cad: [5, 16],
+  voice: [5, 50],
+  radio: [5, 84],
+  outbox: [37, 50],
+  'relay-a': [65, 24],
+  'relay-b': [65, 76],
+  'agency-1': [95, 16],
+  'agency-2': [95, 50],
+  'agency-3': [95, 84],
+};
+---
+
+<section class="hero" id="top" aria-labelledby="hero-title">
+  <h1 id="hero-title" class="display title" aria-label={lines.join(' ')}>
+    {
+      lines.map((line) => (
+        <span class="line" aria-hidden="true">
+          {line.split(' ').map((word) => (
+            <span class:list={['word', { accent: word === 'word' }]}>
+              {[...word].map((char) => (
+                <span class="char">{char}</span>
+              ))}{' '}
+            </span>
+          ))}
+        </span>
+      ))
+    }
+  </h1>
+
+  <div class="intro-row">
+    <p class="lede">
+      Jordan Lang. Full stack engineer in Boise, Idaho. I build platforms, distributed systems, and
+      the software people depend on when something has already gone wrong.
+    </p>
+    <p class="prompt no-print">
+      <span id="sim-status" role="status">This system is running. Take any node down.</span>
+    </p>
+  </div>
+
+  <div class="network no-print" id="network">
+    <canvas id="network-canvas" aria-hidden="true"></canvas>
+    {
+      TOPOLOGY.map((node) => (
+        <button
+          type="button"
+          class:list={['node', node.kind]}
+          data-node={node.id}
+          data-label={node.label}
+          aria-pressed="false"
+          aria-label={`Take ${node.label} down`}
+          style={`left:${place[node.id]?.[0]}%;top:${place[node.id]?.[1]}%`}
+        >
+          <span class="mark" aria-hidden="true"></span>
+          <span class="label" aria-hidden="true">{node.label}</span>
+        </button>
+      ))
+    }
+  </div>
+
+  <dl class="counters no-print">
+    <div><dt>Delivered</dt><dd id="stat-applied">0</dd></div>
+    <div><dt>Retried</dt><dd id="stat-retried">0</dd></div>
+    <div><dt>Deduplicated</dt><dd id="stat-deduplicated">0</dd></div>
+    <div class="lost"><dt>Lost</dt><dd id="stat-lost">0</dd></div>
+    <div class="proof">
+      <dt>Proof</dt>
+      <dd>
+        <a href={LINKS.invariants}>Read the tests</a>
+        <button type="button" id="sim-toggle" aria-pressed="false">Pause</button>
+      </dd>
+    </div>
+  </dl>
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    min-height: 100svh;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(13rem, 1fr) auto;
+    padding-top: 3.5rem;
+    overflow: hidden;
+  }
+
+  :global(html[data-degraded]) .hero::before {
+    transform: scaleX(1);
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--flare);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s var(--ease);
+  }
+
+  .title {
+    padding-inline: var(--gutter);
+    font-size: min(16.35vw, 31svh);
+    line-height: 0.84;
+    margin-top: 0.25rem;
+  }
+
+  .line {
+    display: block;
+    white-space: nowrap;
+  }
+
+  .word {
+    display: inline-block;
+    white-space: pre;
+  }
+
+  .char {
+    display: inline-block;
+  }
+
+  .accent {
+    color: var(--flare);
+  }
+
+  :global(html.intro) .char {
+    opacity: 0;
+  }
+
+  .intro-row {
+    display: grid;
+    grid-template-columns: minmax(0, 34rem) minmax(0, 1fr);
+    gap: 2rem;
+    padding: 1.25rem var(--gutter) 0;
+    align-items: end;
+  }
+
+  .lede {
+    color: var(--bone);
+    font-size: clamp(0.875rem, 1.05vw, 1rem);
+  }
+
+  .prompt {
+    justify-self: end;
+    text-align: right;
+    color: var(--dim);
+    font-size: 0.8125rem;
+    min-height: 1.3em;
+  }
+
+  .network {
+    position: relative;
+    margin: 0.75rem var(--gutter) 0.5rem;
+    min-height: 13rem;
+  }
+
+  canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .node {
+    --size: 1.25rem;
+    position: absolute;
+    width: 2.75rem;
+    height: 2.75rem;
+    transform: translate(-50%, -50%);
+    display: grid;
+    place-items: center;
+    cursor: crosshair;
+  }
+
+  .node.outbox {
+    --size: 1.875rem;
+  }
+
+  .mark {
+    position: relative;
+    width: var(--size);
+    height: var(--size);
+    background: var(--ink);
+    border: 1.5px solid var(--bone);
+    transition: border-color 0.15s, background 0.15s, transform 0.2s var(--ease);
+  }
+
+  .mark::after {
+    content: '';
+    position: absolute;
+    inset: 22%;
+    background: var(--bone);
+    transition: opacity 0.15s;
+  }
+
+  .node:hover .mark {
+    border-color: var(--flare);
+    transform: scale(1.18);
+  }
+
+  .node[aria-pressed='true'] .mark {
+    border-color: var(--flare);
+    background:
+      linear-gradient(45deg, transparent 47%, var(--flare) 47% 53%, transparent 53%),
+      linear-gradient(-45deg, transparent 47%, var(--flare) 47% 53%, transparent 53%);
+  }
+
+  .node[aria-pressed='true'] .mark::after {
+    opacity: 0;
+  }
+
+  .label {
+    position: absolute;
+    bottom: calc(50% + var(--size) / 2 + 0.3rem);
+    font-size: 0.6875rem;
+    white-space: nowrap;
+    color: var(--dim);
+  }
+
+  .node[aria-pressed='true'] .label {
+    color: var(--flare);
+  }
+
+  .node.source .label {
+    left: calc(50% - var(--size) / 2);
+  }
+
+  .node.agency .label {
+    right: calc(50% - var(--size) / 2);
+  }
+
+  .counters {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr)) minmax(0, 1.4fr);
+    border-top: 1px solid var(--line);
+  }
+
+  .counters > div {
+    padding: 0.7rem 0 0.8rem var(--gutter);
+    border-left: 1px solid var(--line);
+  }
+
+  .counters > div:first-child {
+    border-left: 0;
+  }
+
+  dt {
+    font-size: 0.6875rem;
+    color: var(--dim);
+  }
+
+  dd {
+    font-size: clamp(1rem, 1.7vw, 1.5rem);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.3;
+  }
+
+  .proof dd {
+    display: flex;
+    gap: 1.25rem;
+    font-size: 0.8125rem;
+    font-weight: 400;
+    line-height: 2;
+  }
+
+  .proof a,
+  .proof button {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--dim);
+  }
+
+  .proof a:hover,
+  .proof button:hover {
+    color: var(--flare);
+  }
+
+  @media (max-width: 760px) {
+    .title {
+      font-size: 21.5vw;
+    }
+
+    .line {
+      display: inline;
+      white-space: normal;
+    }
+
+    .network {
+      min-height: 19rem;
+    }
+
+    .intro-row {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+
+    .prompt {
+      justify-self: start;
+      text-align: left;
+      color: var(--flare);
+    }
+
+    .counters {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .hero {
+      grid-template-rows: auto auto minmax(19rem, 1fr) auto;
+    }
+
+    .counters > div {
+      padding-left: var(--gutter);
+    }
+
+    .counters > div:nth-child(odd) {
+      border-left: 0;
+    }
+
+    .counters > div:nth-child(n + 3) {
+      border-top: 1px solid var(--line);
+    }
+
+    .proof {
+      grid-column: 1 / -1;
+      border-left: 0 !important;
+    }
+  }
+</style>
+
+<script>
+  import { startHero } from '../scripts/hero';
+
+  startHero();
+</script>

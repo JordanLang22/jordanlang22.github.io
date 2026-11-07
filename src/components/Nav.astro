@@ -1,0 +1,59 @@
+---
+const items = [
+  ['#record', 'Record'],
+  ['#orders', 'Orders'],
+  ['#log', 'Log'],
+  ['#contact', 'Contact'],
+];
+---
+
+<header class="nav no-print" data-nav>
+  <a class="name" href="#top">Jordan Lang</a>
+  <nav aria-label="Sections">
+    <ul>
+      {items.map(([href, label]) => <li><a href={href}>{label}</a></li>)}
+    </ul>
+  </nav>
+</header>
+
+<style>
+  .nav {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 50;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem var(--gutter);
+    font-size: 0.8125rem;
+    color: #fff;
+    mix-blend-mode: difference;
+    transition: opacity 0.25s;
+  }
+
+  .nav:global(.away) {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .name {
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  ul {
+    display: flex;
+    gap: clamp(1rem, 2.4vw, 2rem);
+  }
+
+  li a {
+    text-decoration: none;
+    background: linear-gradient(currentcolor, currentcolor) no-repeat left bottom / 0 1px;
+    transition: background-size 0.3s var(--ease);
+    padding-bottom: 2px;
+  }
+
+  li a:hover {
+    background-size: 100% 1px;
+  }
+</style>

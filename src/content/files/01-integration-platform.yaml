@@ -1,0 +1,33 @@
+order: 1
+subject: Integration platform
+organisation: GovWorx
+kicker: Public safety data hub
+stamp: In service
+meta:
+  - { label: Role, value: Primary engineer and technical owner }
+  - { label: Since, value: February 2026 }
+  - { label: Build, value: Greenfield }
+  - { label: Connectors, value: 60+ in production }
+stack: C#/.NET, MySQL, React, TypeScript, AWS ECS, Terraform
+summary: >-
+  Emergency systems don't share a language. I designed and built the hub between
+  [[external public safety systems]] and the GovWorx product suite. Products speak one shared
+  contract, and the platform takes on each vendor's dialect and delivery. Vendors and customers:
+  {{18|Vendor and customer names}}.
+findings:
+  - title: A commit and a delivery cannot disagree
+    body: >-
+      Events leave through a [[transactional outbox]], so writing the data and promising to send it
+      are one operation. Delivery is idempotent, retried, and recoverable.
+  - title: Order survives the trip
+    body: >-
+      Incident updates stay in order across bidirectional CAD workflows, including the route from
+      cloud to on-premises systems.
+  - title: The specification is the work
+    body: >-
+      I turn vendor ICDs and NENA EIDO requirements into connectors, lead vendor testing, and
+      coordinate each change across the platform and the products that receive it.
+  - title: Owned through operations
+    body: >-
+      Architecture, database, services, AWS infrastructure, Terraform, migrations, and releases. I
+      also own the CAD and voice-logging connector stack behind DataAgent.

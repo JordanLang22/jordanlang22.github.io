@@ -1,0 +1,143 @@
+---
+import activity from '../data/activity.json';
+
+const CELL = 12;
+const GAP = 3;
+const STEP = CELL + GAP;
+
+const number = new Intl.NumberFormat('en-US');
+const levels = (count: number) => {
+  if (count === 0) return 0;
+  if (count < 5) return 1;
+  if (count < 15) return 2;
+  if (count < 40) return 3;
+  return 4;
+};
+
+const cells = activity.weeks.flatMap((week, column) =>
+  week.counts.map((count, index) => ({
+    x: column * STEP,
+    y: (week.firstWeekday + index) * STEP,
+    level: levels(count),
+  })),
+);
+const width = activity.weeks.length * STEP - GAP;
+const height = 7 * STEP - GAP;
+const hidden = number.format(activity.private);
+const total = number.format(activity.total);
+---
+
+<section class="activity" aria-labelledby="activity-title">
+  <h2 id="activity-title" class="display">
+    {total} contributions,<br /><span>{hidden} you can’t see</span>
+  </h2>
+  <p class="caption">
+    My last twelve months of GitHub contributions, as of {activity.generated}. Nearly all of them
+    are in private repositories, which is why my public profile looks so quiet.
+  </p>
+  <div class="scroller">
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={`Contribution heatmap: ${total} contributions on ${activity.activeDays} active days in the last year.`}
+      data-heatmap
+    >
+      {cells.map(({ x, y, level }) => <rect x={x} y={y} width={CELL} height={CELL} class={`l${level}`} />)}
+    </svg>
+  </div>
+  <ul class="languages" aria-label="Languages across all repositories">
+    {
+      activity.languages.slice(0, 5).map(({ name, share }) => (
+        <li>
+          <span class="name">{name}</span>
+          <span class="meter" style={`--share:${share}%`} aria-hidden="true" />
+          <span class="share">{share}%</span>
+        </li>
+      ))
+    }
+  </ul>
+</section>
+
+<style>
+  .activity {
+    background: var(--ink);
+    padding: clamp(3rem, 8vh, 5rem) var(--gutter);
+    border-top: 1px solid var(--line);
+  }
+
+  h2 {
+    font-size: clamp(2.5rem, 7.8vw, 8.5rem);
+  }
+
+  h2 span {
+    color: var(--flare);
+  }
+
+  .caption {
+    color: var(--dim);
+    max-width: 36rem;
+    margin: 1rem 0 2.5rem;
+    font-size: 0.875rem;
+  }
+
+  .scroller {
+    overflow-x: auto;
+  }
+
+  svg {
+    width: 100%;
+    min-width: 46rem;
+    height: auto;
+  }
+
+  rect {
+    fill: var(--ink-raised);
+  }
+
+  .l1 {
+    fill: #6b3a24;
+  }
+
+  .l2 {
+    fill: #a84820;
+  }
+
+  .l3 {
+    fill: #dc5220;
+  }
+
+  .l4 {
+    fill: var(--flare);
+  }
+
+  .languages {
+    margin-top: 2.5rem;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 1.5rem;
+    font-size: 0.8125rem;
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.25rem 0.5rem;
+  }
+
+  .share {
+    color: var(--dim);
+  }
+
+  .meter {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    height: 2px;
+    background: linear-gradient(var(--bone), var(--bone)) no-repeat left / var(--share) 100%, var(--line);
+  }
+
+  @media (max-width: 860px) {
+    .languages {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+</style>

@@ -1,0 +1,37 @@
+---
+const statement =
+  'I was a police officer for nearly seven years. On a bad night the radio works or it doesn’t, and the report has to be true. I build software the same way.';
+---
+
+<section class="thesis" aria-label="About">
+  <p class="statement" data-reveal-words>{statement}</p>
+  <p class="note">
+    Before engineering full time, I wired up patrol cars, ran IT for five semiconductor plants, and
+    integrated Axon products into police networks around the world. I know what the person using
+    the system is dealing with, and I write software with that person in mind.
+  </p>
+</section>
+
+<style>
+  .thesis {
+    padding: clamp(6rem, 18vh, 12rem) var(--gutter);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3rem;
+  }
+
+  .statement {
+    font-family: var(--display);
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(2.6rem, 7.4vw, 8rem);
+    line-height: 0.96;
+    max-width: 17em;
+  }
+
+  .note {
+    max-width: 40rem;
+    justify-self: end;
+    color: var(--dim);
+  }
+</style>

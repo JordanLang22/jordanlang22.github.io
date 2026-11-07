@@ -1,0 +1,116 @@
+---
+import { LINKS } from '../data/site';
+
+const links = [
+  ['LinkedIn', LINKS.linkedin],
+  ['GitHub', LINKS.github],
+  ['Email', LINKS.email],
+];
+const commit = import.meta.env.PUBLIC_COMMIT?.slice(0, 7) ?? 'local';
+---
+
+<footer class="contact" id="contact">
+  <p class="line">
+    Senior and lead engineering, platform engineering, and hands-on architecture, including contract
+    work. Remote from Boise.
+  </p>
+  <h2 class="display">Go ahead</h2>
+  <ul>
+    {
+      links.map(([label, href]) => (
+        <li>
+          <a href={href}><span>{label}</span><i aria-hidden="true">Transmit</i></a>
+        </li>
+      ))
+    }
+  </ul>
+  <p class="build">
+    <span>Jordan Lang</span>
+    <span>Build {commit}</span>
+    <a href={LINKS.source}>Source</a>
+  </p>
+</footer>
+
+<style>
+  .contact {
+    background: var(--flare);
+    color: var(--ink);
+    padding: clamp(4rem, 12vh, 8rem) var(--gutter) 1.25rem;
+  }
+
+  .contact :global(::selection) {
+    background: var(--ink);
+    color: var(--flare);
+  }
+
+  .contact :global(:focus-visible) {
+    outline-color: var(--ink);
+  }
+
+  .line {
+    max-width: 34rem;
+    font-weight: 500;
+  }
+
+  h2 {
+    font-size: min(26vw, 58svh);
+    line-height: 0.86;
+    margin: 1.5rem 0 2rem -0.02em;
+    white-space: nowrap;
+  }
+
+  li {
+    border-top: 2px solid var(--ink);
+  }
+
+  li:last-child {
+    border-bottom: 2px solid var(--ink);
+  }
+
+  li a {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.7rem 0 0.8rem;
+    text-decoration: none;
+    font-family: var(--display);
+    font-weight: 800;
+    text-transform: uppercase;
+    font-size: clamp(2rem, 5vw, 4.5rem);
+    line-height: 1;
+    transition: padding 0.3s var(--ease);
+  }
+
+  li i {
+    font-family: var(--mono);
+    font-style: normal;
+    font-weight: 500;
+    text-transform: none;
+    font-size: 0.875rem;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  li a:hover,
+  li a:focus-visible {
+    padding-left: 1.25rem;
+  }
+
+  li a:hover i,
+  li a:focus-visible i {
+    opacity: 1;
+  }
+
+  .build {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .build a {
+    text-underline-offset: 3px;
+  }
+</style>

@@ -1,0 +1,99 @@
+---
+import { STANDING_ORDERS } from '../data/site';
+---
+
+<section class="orders" id="orders" aria-labelledby="orders-title">
+  <header>
+    <h2 id="orders-title" class="display">Standing orders</h2>
+    <p>Six rules I found running through everything I build, once I went looking. None of them are original. All of them have been paid for.</p>
+  </header>
+  <ol>
+    {
+      STANDING_ORDERS.map(({ order, detail, evidence }, index) => (
+        <li data-order>
+          <span class="index">{String(index + 1).padStart(2, '0')}</span>
+          <h3 class="display">{order}</h3>
+          <div class="support">
+            <p>{detail}</p>
+            <p class="evidence">{evidence}</p>
+          </div>
+        </li>
+      ))
+    }
+  </ol>
+</section>
+
+<style>
+  .orders {
+    position: relative;
+    background: var(--ink);
+    padding: clamp(5rem, 14vh, 9rem) var(--gutter);
+  }
+
+  header {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 2rem;
+    align-items: end;
+    margin-bottom: clamp(2.5rem, 7vh, 4.5rem);
+  }
+
+  h2 {
+    font-size: clamp(3.5rem, 12vw, 12rem);
+  }
+
+  header p {
+    color: var(--dim);
+    font-size: 0.875rem;
+  }
+
+  li {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 3fr) minmax(0, 1.4fr);
+    gap: 1.5rem;
+    align-items: baseline;
+    border-top: 1px solid var(--line);
+    padding: 1.1rem 0 1.25rem;
+    transition: color 0.2s;
+  }
+
+  li:hover {
+    color: var(--flare);
+  }
+
+  .index {
+    font-size: 0.75rem;
+    color: var(--dim);
+  }
+
+  h3 {
+    font-size: clamp(2rem, 4.6vw, 4.75rem);
+  }
+
+  .support {
+    color: var(--bone);
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .evidence {
+    color: var(--dim);
+    font-size: 0.75rem;
+    margin-top: 0.35rem;
+  }
+
+  @media (max-width: 860px) {
+    header {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    li {
+      grid-template-columns: 2rem minmax(0, 1fr);
+      gap: 0.25rem 0.75rem;
+    }
+
+    .support {
+      grid-column: 2;
+    }
+  }
+</style>

@@ -1,0 +1,36 @@
+order: 2
+subject: Dendrition
+organisation: North Construct
+kicker: Multi-tenant SaaS, live in production
+stamp: Live
+link: { label: dendrition.com, href: "https://dendrition.com" }
+meta:
+  - { label: Role, value: Co-founder, sole engineer }
+  - { label: Since, value: June 2026 }
+  - { label: Commits, value: "693" }
+  - { label: Schema, value: 63 models, 60 migrations }
+  - { label: Tests, value: 230 files, 29 browser specs }
+stack: Next.js 16, React 19, TypeScript, Prisma, Postgres, Better Auth, Stripe, Mux, Vercel
+summary: >-
+  A private video library for jiu-jitsu academies. Owners publish programs, and members get access
+  by belt rank. I designed and built all of it: [[authentication, tenant isolation, private video,
+  billing, and release automation]]. Isolation policy: {{22|Security detail}}. Pricing:
+  {{9|Commercial terms}}.
+findings:
+  - title: Isolation lives in the database
+    body: >-
+      Tenant boundaries are enforced by [[Postgres row-level security]], retrofitted onto a real
+      schema in stages. The binding lives and dies with its transaction, so it can't leak through a
+      pooled connection.
+  - title: Jobs outlive their runtime
+    body: >-
+      Intent and job are written in one transaction, and the workflow starts after commit with only
+      an ID. The database stays authoritative and the runtime never holds a payload.
+  - title: Stale events lose
+    body: >-
+      Every video webhook must correlate to exactly one record, so an older event can't overwrite a
+      newer replacement. Stripe receipts are persisted before dispatch.
+  - title: A release undoes itself
+    body: >-
+      Publishing prepares a candidate, checks the schema, promotes it, verifies it live, and rolls
+      back on failure. Only additive migrations apply automatically.

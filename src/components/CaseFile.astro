@@ -1,0 +1,238 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import Redacted from './Redacted.astro';
+
+interface Props {
+  file: CollectionEntry<'files'>;
+  total: number;
+}
+
+const { file, total } = Astro.props;
+const { order, subject, organisation, kicker, stamp, link, meta, stack, summary, findings } =
+  file.data;
+const number = String(order).padStart(2, '0');
+const of = String(total).padStart(2, '0');
+---
+
+<article class="file" data-file aria-labelledby={`file-${order}`}>
+  <div class="sheet">
+    <header class="head">
+      <p>File {number} of {of}</p>
+      <p>{organisation}</p>
+    </header>
+    <div class="title-row">
+      <h3 id={`file-${order}`}>{subject}</h3>
+      <p class="stamp" data-stamp>{stamp}</p>
+    </div>
+    <div class="body">
+      <aside class="meta">
+        <p class="kicker">{kicker}</p>
+        <dl>
+          {
+            meta.map(({ label, value }) => (
+              <div>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))
+          }
+        </dl>
+        {link && <a class="link" href={link.href}>{link.label}</a>}
+      </aside>
+      <div class="narrative">
+        <p class="summary"><Redacted source={summary} /></p>
+        <ol class="findings">
+          {
+            findings.map(({ title, body }) => (
+              <li>
+                <h4>{title}</h4>
+                <p><Redacted source={body} /></p>
+              </li>
+            ))
+          }
+        </ol>
+        <p class="stack"><span>Stack</span> {stack}</p>
+      </div>
+    </div>
+  </div>
+</article>
+
+<style>
+  .file {
+    background: var(--paper);
+    color: var(--type);
+    font-family: var(--typewriter);
+    border-top: 1px solid var(--paper-line);
+    position: relative;
+    transform-origin: 50% 0;
+  }
+
+  .file::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: #000;
+    opacity: var(--shade, 0);
+    pointer-events: none;
+  }
+
+  @media (min-width: 861px) {
+    :global(html.motion) .file {
+      position: sticky;
+      top: min(0px, calc(100svh - var(--file-height, 100svh)));
+    }
+  }
+
+  .sheet {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    padding: 3.75rem var(--gutter) 1.75rem;
+  }
+
+  .head {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    border-bottom: 1px solid var(--paper-line);
+    padding-bottom: 0.5rem;
+  }
+
+  .title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 2rem;
+    padding: clamp(0.75rem, 2vh, 1.5rem) 0 clamp(0.75rem, 2vh, 1.5rem);
+  }
+
+  h3 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(3rem, min(8.6vw, 15svh), 8.5rem);
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .stamp {
+    flex: none;
+    border: 3px solid var(--stamp);
+    color: var(--stamp);
+    font-weight: 700;
+    font-size: clamp(0.9rem, 1.5vw, 1.35rem);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 0.35em 0.7em 0.2em;
+    transform: rotate(-7deg);
+  }
+
+  .body {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(0, 3fr);
+    gap: clamp(1.5rem, 4vw, 4rem);
+  }
+
+  .kicker {
+    font-weight: 700;
+    margin-bottom: 1rem;
+    line-height: 1.3;
+  }
+
+  dl div {
+    display: grid;
+    gap: 0;
+    padding: 0.35rem 0;
+    border-top: 1px solid rgb(20 20 18 / 22%);
+  }
+
+  dt {
+    font-size: 0.8125rem;
+    color: var(--type-soft);
+  }
+
+  dd {
+    line-height: 1.3;
+  }
+
+  .link {
+    display: inline-block;
+    margin-top: 1rem;
+    font-weight: 700;
+    text-underline-offset: 3px;
+  }
+
+  .link:hover {
+    color: var(--stamp);
+  }
+
+  .summary {
+    font-size: clamp(1.1rem, min(1.6vw, 2.5svh), 1.5rem);
+    line-height: 1.45;
+    max-width: 44em;
+  }
+
+  .findings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem clamp(1.5rem, 3vw, 3rem);
+    margin-top: clamp(1.25rem, 3.5vh, 2.5rem);
+  }
+
+  h4 {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0 0 0.25rem;
+  }
+
+  li p {
+    font-size: 0.9375rem;
+    line-height: 1.5;
+  }
+
+  .stack {
+    margin-top: clamp(1.25rem, 3vh, 2rem);
+    font-size: 0.875rem;
+    border-top: 1px solid var(--paper-line);
+    padding-top: 0.5rem;
+  }
+
+  .stack span {
+    font-weight: 700;
+    margin-right: 0.5rem;
+  }
+
+  @media (max-width: 860px) {
+    .body {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .findings {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    dl {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 1rem;
+    }
+
+    .title-row {
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+  }
+
+  @media print {
+    .file {
+      position: static !important;
+      break-inside: avoid;
+    }
+
+    .sheet {
+      min-height: 0;
+      padding-block: 1rem;
+    }
+  }
+</style>

@@ -1,0 +1,31 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base title="404, undeliverable" description="This page does not exist.">
+  <main class="missing">
+    <p>Status 404. Retries exhausted.</p>
+    <h1 class="display">Undeliverable</h1>
+    <a href="/">Return to sender</a>
+  </main>
+</Base>
+
+<style>
+  .missing {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1rem;
+    padding: var(--gutter);
+  }
+
+  h1 {
+    font-size: 18vw;
+    color: var(--flare);
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+</style>

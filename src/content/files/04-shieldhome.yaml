@@ -1,0 +1,27 @@
+order: 4
+subject: ShieldHome
+organisation: Independent
+kicker: Native TV launcher and home server
+stamp: Confirmed
+meta:
+  - { label: Role, value: Sole engineer }
+  - { label: Built, value: 51 commits in two weeks }
+  - { label: Modules, value: 3 Gradle modules }
+  - { label: Tests, value: "247" }
+stack: Kotlin 2.2, Compose for TV, Room, Ktor 3, SQLite, Docker
+summary: >-
+  A personal Android TV launcher for NVIDIA Shield, backed by a private Kotlin service for media,
+  weather, and home controls. Network and device details: {{14|Home network details}}.
+findings:
+  - title: Accepted is not confirmed
+    body: >-
+      A device taking a command doesn't mean it happened. Controls show [[confirmed]] only after a
+      fresh read from the device, and mutexes stop commands from racing.
+  - title: Retries that can't double up
+    body: >-
+      Requests are keyed on an operation ID and a payload hash, and reuse is rejected. An uncertain
+      outcome reconciles before anything is retried.
+  - title: Ten-foot focus
+    body: >-
+      Long-press is a pure state machine, and saved focus survives recreation, covered by
+      instrumented remote tests.

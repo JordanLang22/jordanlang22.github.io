@@ -1,0 +1,54 @@
+---
+import { LINKS } from '../data/site';
+---
+
+<section class="agents" aria-labelledby="agents-title">
+  <h2 id="agents-title" class="display">Agents write code.<br />I answer for it.</h2>
+  <div class="columns">
+    <p>
+      Most of my code now starts with a coding agent, and some of these repositories have far more
+      lines than I could type alone. I don’t hide that. It’s part of the job, and I build my own MCP
+      servers, skills, and review workflows to do it well.
+    </p>
+    <p>
+      The architecture, the invariants, and the decision to ship are mine. So is the failure at 3
+      a.m. Agent work goes through the same pull requests, CI, and release gates as mine.
+    </p>
+    <p>
+      This site was built the same way. The simulation at the top is a tested model of an
+      outbox, and the suite tries to break it with hundreds of random failure schedules on every
+      push. <a href={LINKS.invariants}>Read the tests</a> or <a href={LINKS.source}>the source</a>.
+    </p>
+  </div>
+</section>
+
+<style>
+  .agents {
+    background: var(--ink);
+    padding: clamp(4rem, 12vh, 8rem) var(--gutter);
+    border-top: 1px solid var(--line);
+  }
+
+  h2 {
+    font-size: clamp(2.75rem, 8.4vw, 9rem);
+  }
+
+  .columns {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(1.5rem, 3vw, 3rem);
+    margin-top: 2.5rem;
+    font-size: 0.875rem;
+  }
+
+  a {
+    color: var(--flare);
+    text-underline-offset: 3px;
+  }
+
+  @media (max-width: 860px) {
+    .columns {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+</style>

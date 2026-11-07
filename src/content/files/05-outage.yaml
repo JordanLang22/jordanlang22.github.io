@@ -1,0 +1,28 @@
+order: 5
+subject: The outage
+organisation: NxEdge
+kicker: Incident command, July 2024
+stamp: Resolved
+meta:
+  - { label: Role, value: Sole IT operations, recovery lead }
+  - { label: Sites, value: 5 semiconductor plants }
+  - { label: Users, value: 200+ }
+  - { label: Production lost, value: None }
+stack: Intune, SCCM, PowerShell, Windows, incident response
+summary: >-
+  When the global CrowdStrike outage hit, I built the recovery plan and restored
+  [[all five manufacturing sites before the start of the business day]]. Before software, this was
+  the job: find the actual failure, decide fast, and leave it supported.
+findings:
+  - title: Twelve hours against seven days
+    body: >-
+      A critical mass spectrometer failed with a seven-day vendor estimate. Rapid diagnostics brought
+      it back in [[twelve hours]], averting over $15M in potential losses.
+  - title: Migration without interruption
+    body: >-
+      I directed the company-wide Windows 11 rollout and its risk plan, protecting over $10M per
+      quarter in operational capacity from end-of-life exposure.
+  - title: Two hours became twenty minutes
+    body: >-
+      PowerShell automation through Intune and SCCM cut endpoint provisioning time by more than
+      eighty percent.
