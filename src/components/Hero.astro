@@ -55,7 +55,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
           data-node={node.id}
           data-label={node.label}
           aria-pressed="false"
-          aria-label={`Take ${node.label} down`}
+          aria-label={`${node.label} down`}
           style={`left:${place[node.id]?.[0]}%;top:${place[node.id]?.[1]}%`}
         >
           <span class="mark" aria-hidden="true"></span>
@@ -100,7 +100,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
       <dt>Proof</dt>
       <dd>
         <a href={LINKS.invariants}>Read the tests</a>
-        <button type="button" id="sim-toggle" aria-pressed="false">Pause</button>
+        <button type="button" id="sim-toggle">Pause</button>
       </dd>
     </div>
   </dl>
@@ -112,7 +112,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     min-height: 100svh;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(15rem, 1fr) auto auto;
+    grid-template-rows: auto auto minmax(12.5rem, 1fr) auto auto;
     padding-top: 3.5rem;
     overflow: hidden;
   }
@@ -185,7 +185,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
   .network {
     position: relative;
     margin: 0.5rem var(--gutter) 0.25rem;
-    min-height: 15rem;
+    min-height: clamp(12.5rem, 28svh, 15rem);
   }
 
   canvas {
@@ -451,6 +451,8 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
       justify-self: start;
       text-align: left;
       color: var(--flare);
+      /* Three lines, the longest message, so a new message never shoves the network down. */
+      min-height: 4.8em;
     }
 
     .counters {

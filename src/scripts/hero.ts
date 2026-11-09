@@ -45,14 +45,16 @@ export function startHero(): void {
   let lastCounters = 0;
   let lastTranslation = 0;
   let drillIndex = 0;
+  /** A route the drill switched off and still owes a switch back on. */
+  let drilledRoute: HTMLButtonElement | undefined;
 
   const say = (message: string) => {
     status.textContent = message;
   };
 
+  // The label names the action, so it is not also a pressed toggle: "Run, pressed" says nothing.
   const renderControl = () => {
     toggle.textContent = paused ? 'Run' : 'Pause';
-    toggle.setAttribute('aria-pressed', String(paused));
   };
 
   const setNode = (button: HTMLButtonElement, up: boolean) => {
@@ -60,10 +62,6 @@ export function startHero(): void {
     const label = button.dataset.label ?? id;
     sim.setUp(id, up);
     button.setAttribute('aria-pressed', String(!up));
-    button.setAttribute(
-      'aria-label',
-      `${up ? 'Take' : 'Restore'} ${label} ${up ? 'down' : ''}`.trim(),
-    );
     if (up) healAt.delete(id);
     else healAt.set(id, performance.now() + AUTO_HEAL_MS);
     const down = [...sim.nodes.values()].filter((node) => !node.up).length;
@@ -92,6 +90,7 @@ export function startHero(): void {
   for (const button of switches) {
     button.addEventListener('click', () => {
       touched = true;
+      if (drilledRoute === button) drilledRoute = undefined;
       const on = button.getAttribute('aria-checked') !== 'true';
       const label = setRoute(button, on);
       say(
@@ -123,11 +122,16 @@ export function startHero(): void {
       const target = switches.find((button) => `route:${button.dataset.route}` === drill);
       if (!target) return;
       const label = setRoute(target, false);
+      drilledRoute = target;
       say(`Routing change: ${label} switched off. The others keep receiving.`);
       window.setTimeout(() => {
-        if (touched) return;
+        // Nodes heal themselves, routes do not. If someone took over mid-drill without touching
+        // this switch, it still goes back on, or the drill would leave it off for good.
+        if (drilledRoute !== target) return;
+        drilledRoute = undefined;
         setRoute(target, true);
-        say(`${label} is routed again. Your turn: flip a switch or take a node down.`);
+        if (!touched)
+          say(`${label} is routed again. Your turn: flip a switch or take a node down.`);
       }, DRILL_LENGTH_MS);
       return;
     }

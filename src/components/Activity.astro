@@ -57,7 +57,7 @@ const hidden = number.format(activity.private);
     repositories isn’t counted. The grid is my last year of contributions: {total}, of which {hidden}{' '}
     are private.
   </p>
-  <div class="scroller">
+  <div class="scroller" tabindex="0" role="group" aria-label="Contribution heatmap, scrolls sideways">
     <svg
       viewBox={`0 0 ${width} ${height}`}
       role="img"

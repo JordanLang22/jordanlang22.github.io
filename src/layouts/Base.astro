@@ -5,9 +5,10 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description: string;
+  noindex?: boolean;
 }
 
-const { title, description } = Astro.props;
+const { title, description, noindex = false } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const image = new URL('/og.png', Astro.site);
 const person = JSON.stringify({
@@ -28,7 +29,7 @@ const person = JSON.stringify({
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
-    <link rel="canonical" href={canonical} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <meta name="theme-color" content="#0c100f" />
     <meta property="og:type" content="website" />
@@ -44,6 +45,9 @@ const person = JSON.stringify({
       document.documentElement.classList.add('js');
       if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
         document.documentElement.classList.add('motion', 'intro');
+        // The intro hides the headline until the page script delivers it. If that script never
+        // arrives, the headline still has to.
+        setTimeout(() => document.documentElement.classList.remove('intro'), 5000);
       }
     </script>
   </head>

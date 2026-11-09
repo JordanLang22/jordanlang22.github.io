@@ -76,6 +76,47 @@ for (const width of [375, 1440]) {
   });
 }
 
+test('the bar takes the colour of the section under it and marks where you are', async ({
+  page,
+}) => {
+  await page.goto('/');
+  const nav = page.locator('[data-nav]');
+  await expect(nav).toHaveAttribute('data-tone', 'ink');
+  await page.locator('#record [data-file]').first().scrollIntoViewIfNeeded();
+  await expect(nav).toHaveAttribute('data-tone', 'paper');
+  await expect(nav.getByRole('link', { name: 'Record' })).toHaveAttribute('aria-current', 'true');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expect(nav).toHaveAttribute('data-tone', 'flare');
+  await expect(nav.getByRole('link', { name: 'Contact' })).toHaveAttribute('aria-current', 'true');
+  await expect(nav.getByRole('link', { name: 'Record' })).not.toHaveAttribute('aria-current');
+});
+
+test('a printout made without scrolling still has everything on it', async ({ page }) => {
+  await page.goto('/');
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
+  await page.emulateMedia({ media: 'print' });
+  for (const selector of [
+    '[data-order]',
+    '[data-log-row]',
+    '[data-stamp]',
+    '[data-heatmap] rect',
+  ]) {
+    const opacities = await page
+      .locator(selector)
+      .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).opacity));
+    expect(new Set(opacities), selector).toEqual(new Set(['1']));
+  }
+  const commits = activity.totals.commits.toLocaleString('en-US');
+  await expect(page.locator('[data-count]').first()).toHaveText(commits);
+  const statement = page.locator('[data-reveal-words]');
+  const colours = await statement
+    .locator('span')
+    .evaluateAll((words) => words.map((word) => getComputedStyle(word).color));
+  expect(new Set(colours)).toEqual(
+    new Set([await statement.evaluate((node) => getComputedStyle(node).color)]),
+  );
+});
+
 test.describe('with reduced motion', () => {
   test.use({ reducedMotion: 'reduce' });
 
@@ -97,6 +138,22 @@ test.describe('with reduced motion', () => {
     );
     expect(serious.map(({ id, nodes }) => `${id}: ${nodes.length}`)).toEqual([]);
   });
+});
+
+test('has no serious accessibility violations on a phone, with motion on', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto('/');
+  await expect(page.locator('html')).not.toHaveClass(/intro/, { timeout: 8_000 });
+  // Read the page the way a person does, so the scan sees it revealed and not mid-animation.
+  const height = await page.evaluate(() => document.documentElement.scrollHeight);
+  for (let y = 0; y < height; y += 400) {
+    await page.evaluate((top) => window.scrollTo(0, top), y);
+    await page.waitForTimeout(50);
+  }
+  await page.waitForTimeout(1_500);
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  const serious = violations.filter(({ impact }) => impact === 'serious' || impact === 'critical');
+  expect(serious.map(({ id, nodes }) => `${id}: ${nodes.length}`)).toEqual([]);
 });
 
 test.describe('without JavaScript', () => {

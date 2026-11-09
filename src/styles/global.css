@@ -129,4 +129,37 @@ button {
     /* biome-ignore lint/complexity/noImportantStyles: print has to beat component styles */
     display: none !important;
   }
+
+  /* Scroll animations park inline styles on whatever has not been reached yet. Paper gets the
+     finished page whether or not anyone scrolled first. */
+  [data-order],
+  [data-log-row],
+  [data-file] {
+    /* biome-ignore lint/complexity/noImportantStyles: has to beat inline animation styles */
+    opacity: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: has to beat inline animation styles */
+    transform: none !important;
+  }
+
+  [data-stamp],
+  [data-heatmap] rect {
+    /* biome-ignore lint/complexity/noImportantStyles: has to beat inline animation styles */
+    opacity: 1 !important;
+  }
+
+  [data-stamp] {
+    /* biome-ignore lint/complexity/noImportantStyles: has to beat inline animation styles */
+    transform: rotate(-7deg) !important;
+  }
+
+  [data-reveal-words] span {
+    /* biome-ignore lint/complexity/noImportantStyles: has to beat inline animation styles */
+    color: inherit !important;
+  }
+
+  [data-file]::after,
+  [data-bars] {
+    /* biome-ignore lint/complexity/noImportantStyles: has to beat inline animation styles */
+    display: none !important;
+  }
 }
