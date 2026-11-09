@@ -78,7 +78,8 @@ export function startHero(): void {
   let nextDrill = performance.now() + FIRST_DRILL_MS;
   let accumulator = 0;
   let last = performance.now();
-  let lastCounters = 0;
+  // Not zero: a page that starts within the first 120ms would skip its very first count.
+  let lastCounters = Number.NEGATIVE_INFINITY;
   let lastTranslation = 0;
   let drillIndex = 0;
   /** A route the drill switched off and still owes a switch back on. */
