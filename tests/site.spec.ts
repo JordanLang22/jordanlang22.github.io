@@ -176,6 +176,8 @@ test.describe('with reduced motion', () => {
     await expect(page.locator('html')).not.toHaveClass(/motion/);
     await expect(page.locator('#sim-toggle')).toHaveText('Run');
     await expect(page.locator('#hero-title .char').first()).toBeVisible();
+    // The status line is written last, after the opening traffic has been drawn and counted.
+    await expect(page.locator('#sim-status')).toContainText('Paused because');
     const held = await page.locator('#stat-delivered').textContent();
     await page.waitForTimeout(500);
     await expect(page.locator('#stat-delivered')).toHaveText(held ?? '');
