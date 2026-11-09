@@ -1,5 +1,6 @@
 import { gsap } from 'gsap';
-import { type SimSignal, Simulation, TOPOLOGY } from '../sim/engine';
+import { Audit } from '../sim/audit';
+import { type Chaos, type SimSignal, Simulation, TOPOLOGY } from '../sim/engine';
 import { NetworkView } from './network-view';
 import { describeTranslation } from './translation-sample';
 
@@ -10,6 +11,25 @@ const FIRST_DRILL_MS = 6_000;
 const DRILL_INTERVAL_MS = 13_000;
 const DRILL_LENGTH_MS = 4_500;
 const TRANSLATION_INTERVAL_MS = 1_300;
+const BLACKOUT_MS = 5_000;
+// What each switch does to every link while it is on.
+const CONDITIONS: Readonly<Record<string, { chaos: Partial<Chaos>; on: string; off: string }>> = {
+  loss: {
+    chaos: { loss: 0.15 },
+    on: 'Every link now drops about one packet in seven. Retried climbs. Lost has to stay at zero.',
+    off: 'The links are clean again. Whatever was dropped has already been sent again.',
+  },
+  duplicate: {
+    chaos: { duplicate: 0.35 },
+    on: 'A third of all packets now arrive twice. Deduplicated climbs. Applied twice has to stay at zero.',
+    off: 'No more duplicates. Every one of them was recognised and thrown away.',
+  },
+  jitter: {
+    chaos: { jitter: 45 },
+    on: 'Packets now overtake each other. Receivers hold the early ones until the gap fills.',
+    off: 'Packets arrive in order again. Nothing was applied out of order while they did not.',
+  },
+};
 const DRILLS = ['translate', 'route:product-b', 'store', 'product-c', 'ingest', 'route:product-a'];
 
 const number = new Intl.NumberFormat('en-US');
@@ -25,16 +45,32 @@ export function startHero(): void {
   if (!canvas || !status || !toggle || !hero || !translation) return;
 
   const reducedMotion = !document.documentElement.classList.contains('motion');
-  const sim = new Simulation({ seed: Math.floor(Math.random() * 2 ** 31) });
+  // A seed in the address replays the same traffic, so a run someone doubts can be run again.
+  const requested = Number(new URLSearchParams(location.search).get('seed'));
+  const seed =
+    Number.isInteger(requested) && requested > 0 && requested < 2 ** 31
+      ? requested
+      : Math.floor(Math.random() * 2 ** 31);
+  const sim = new Simulation({ seed });
+  const audit = new Audit();
+  sim.onApply = (delivery) => audit.record(delivery);
   const view = new NetworkView(canvas, buttons, sim);
+  const seedOutput = document.querySelector('#sim-seed');
+  if (seedOutput) seedOutput.textContent = `Seed ${seed}`;
   const healAt = new Map<string, number>();
   const outputs = {
     delivered: document.querySelector('#stat-delivered'),
     returned: document.querySelector('#stat-returned'),
     retried: document.querySelector('#stat-retried'),
     deduplicated: document.querySelector('#stat-deduplicated'),
-    lost: document.querySelector('#stat-lost'),
   };
+  // The promises. Lost is computed from what the system still holds, the rest by the auditor.
+  const vows: readonly (readonly [Element | null, () => number])[] = [
+    [document.querySelector('#stat-lost'), () => sim.lost()],
+    [document.querySelector('#stat-twice'), () => audit.report.appliedTwice],
+    [document.querySelector('#stat-order'), () => audit.report.outOfOrder],
+    [document.querySelector('#stat-misrouted'), () => audit.report.misrouted],
+  ];
 
   let paused = reducedMotion;
   let visible = true;
@@ -47,6 +83,7 @@ export function startHero(): void {
   let drillIndex = 0;
   /** A route the drill switched off and still owes a switch back on. */
   let drilledRoute: HTMLButtonElement | undefined;
+  let blackoutUntil = 0;
 
   const say = (message: string) => {
     status.textContent = message;
@@ -100,6 +137,38 @@ export function startHero(): void {
       );
     });
   }
+
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-chaos]')) {
+    const condition = CONDITIONS[button.dataset.chaos ?? ''];
+    if (!condition) continue;
+    const calm = Object.fromEntries(Object.keys(condition.chaos).map((key) => [key, 0]));
+    button.addEventListener('click', () => {
+      touched = true;
+      const on = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', String(on));
+      sim.setChaos(on ? condition.chaos : calm);
+      say(on ? condition.on : condition.off);
+    });
+  }
+
+  document.querySelector('[data-attack="crash"]')?.addEventListener('click', () => {
+    touched = true;
+    sim.crash('store');
+    view.jolt('store');
+    say(
+      'The store crashed and restarted. It is re-sending everything nobody acknowledged, and receivers are discarding what they already have.',
+    );
+  });
+
+  document.querySelector('[data-attack="blackout"]')?.addEventListener('click', () => {
+    touched = true;
+    for (const button of buttons) setNode(button, false);
+    healAt.clear();
+    blackoutUntil = performance.now() + BLACKOUT_MS;
+    say(
+      'Everything is down at once. Every message is still held somewhere that can send it again.',
+    );
+  });
 
   toggle.addEventListener('click', () => {
     paused = !paused;
@@ -156,7 +225,12 @@ export function startHero(): void {
     if (outputs.deduplicated) {
       outputs.deduplicated.textContent = number.format(sim.stats.deduplicated);
     }
-    if (outputs.lost) outputs.lost.textContent = number.format(sim.lost());
+    for (const [output, read] of vows) {
+      if (!output) continue;
+      const broken = read();
+      output.textContent = number.format(broken);
+      output.toggleAttribute('data-broken', broken > 0);
+    }
   };
 
   const showTranslation = (signals: readonly SimSignal[], now: number) => {
@@ -185,6 +259,11 @@ export function startHero(): void {
         }
         if (steps === MAX_STEPS_PER_FRAME) accumulator = 0;
         runDrill(now);
+      }
+      if (blackoutUntil && now >= blackoutUntil) {
+        blackoutUntil = 0;
+        for (const button of buttons) setNode(button, true);
+        say('Power is back. Everything that was held is moving again.');
       }
       for (const [id, due] of healAt) {
         if (now >= due) {

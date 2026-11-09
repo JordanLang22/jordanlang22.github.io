@@ -7,13 +7,15 @@ meta:
   - { label: Role, value: "Primary engineer and technical owner" }
   - { label: Since, value: "February 2026" }
   - { label: Build, value: "Greenfield" }
-  - { label: Connectors, value: "60+ in production" }
+  - { label: Status, value: "In production" }
 stack: C#/.NET, MySQL, React, TypeScript, AWS ECS, Terraform
 summary: >-
   Emergency systems don't share a language. I don't make the CAD. I designed and built the hub that
   moves data in and out of it, along with [[911 and non-emergency phones and radio]], between
   agencies and the GovWorx products. Products speak one shared contract, and the platform takes on
-  each vendor's dialect and delivery. Vendors and customers: {{18|Vendor and customer names}}.
+  each vendor's dialect and delivery. The pattern underneath is well known. The work is that no two
+  vendors implement it the same way, and the products must never notice. Vendors and customers:
+  {{18|Vendor and customer names}}. Scale: {{12|Connector and agency counts}}.
 findings:
   - title: A commit and a delivery cannot disagree
     body: >-
@@ -21,8 +23,8 @@ findings:
       are one operation. Delivery is idempotent, retried, and recoverable.
   - title: Order survives the trip
     body: >-
-      Incident updates stay in order across bidirectional CAD workflows, including the route from
-      cloud to on-premises systems.
+      Incident updates stay in order across two-way CAD workflows. Network
+      layout: {{22|Deployment topology}}.
   - title: The specification is the work
     body: >-
       I turn vendor ICDs and NENA EIDO requirements into connectors, lead vendor testing, and
@@ -30,4 +32,4 @@ findings:
   - title: Owned through operations
     body: >-
       Architecture, database, services, AWS infrastructure, Terraform, migrations, and releases. I
-      also own the CAD and voice-logging connector stack behind DataAgent.
+      also own the connector stack behind {{10|Product name}}.

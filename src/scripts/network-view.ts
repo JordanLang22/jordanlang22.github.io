@@ -22,9 +22,9 @@ const SHOCK_FRAMES = 34;
 const DROP_SHOCK_SPACING = 26;
 const HUB_PADDING = 44;
 const LINKS: readonly (readonly [string, string])[] = [
-  ['cad', 'ingest'],
-  ['phones', 'ingest'],
-  ['radio', 'ingest'],
+  ['source-a', 'ingest'],
+  ['source-b', 'ingest'],
+  ['source-c', 'ingest'],
   ['ingest', 'store'],
   ['store', 'translate'],
   ['translate', 'product-a'],
@@ -109,6 +109,12 @@ export class NetworkView {
     }
   }
 
+  /** A hit that did not come from the simulation's own signals, such as a crash. */
+  jolt(node: string): void {
+    const anchor = this.anchors.get(node);
+    if (anchor) this.shocks.push({ ...anchor, age: 0, colour: FLARE, reach: 64 });
+  }
+
   draw(fraction: number): void {
     const { context, sim } = this;
     context.clearRect(0, 0, this.width, this.height);
@@ -136,7 +142,7 @@ export class NetworkView {
     context.fillStyle = `rgb(${DIM})`;
     context.font = "11px 'JetBrains Mono Variable', monospace";
     context.textAlign = 'left';
-    context.fillText('Data connections hub', left, top - 6);
+    context.fillText('Hub', left, top - 6);
   }
 
   private drawLinks(): void {

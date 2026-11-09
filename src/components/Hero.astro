@@ -5,9 +5,9 @@ import { TOPOLOGY } from '../sim/engine';
 const lines = ['Software that', 'keeps its word'];
 
 const place: Record<string, [number, number]> = {
-  cad: [5, 15],
-  phones: [5, 48],
-  radio: [5, 81],
+  'source-a': [5, 15],
+  'source-b': [5, 48],
+  'source-c': [5, 81],
   ingest: [30, 48],
   store: [49, 48],
   translate: [68, 48],
@@ -16,6 +16,25 @@ const place: Record<string, [number, number]> = {
   'product-c': [94, 81],
 };
 const products = TOPOLOGY.filter((node) => node.kind === 'product');
+
+const traffic = [
+  ['Delivered', 'stat-delivered'],
+  ['Returned', 'stat-returned'],
+  ['Retried', 'stat-retried'],
+  ['Deduplicated', 'stat-deduplicated'],
+];
+// The promises. Each is counted by an auditor that only watches outcomes, so each can fail.
+const vows = [
+  ['Lost', 'stat-lost'],
+  ['Applied twice', 'stat-twice'],
+  ['Out of order', 'stat-order'],
+  ['Misrouted', 'stat-misrouted'],
+];
+const conditions = [
+  ['loss', 'Drop packets'],
+  ['duplicate', 'Duplicate packets'],
+  ['jitter', 'Shuffle order'],
+];
 ---
 
 <section class="hero" id="top" aria-labelledby="hero-title">
@@ -41,7 +60,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
       the software people depend on when something has already gone wrong.
     </p>
     <p class="prompt no-print">
-      <span id="sim-status" role="status">A live model of what I run: agency to hub to product, and back. Take a node down, or switch a product off.</span>
+      <span id="sim-status" role="status">Try to lose a message. Take a node down, switch a product off, or use the attacks below. The four numbers on the right have to stay at zero.</span>
     </p>
   </div>
 
@@ -85,24 +104,39 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     <p class="translation" id="translation"><span>Waiting for traffic</span></p>
     <p class="legend">
       <span class="to">To products</span>
-      <span class="back">Back to agencies</span>
+      <span class="back">Back to sources</span>
       <span class="retry">Retry</span>
     </p>
   </div>
 
-  <dl class="counters no-print">
-    <div><dt>Delivered</dt><dd id="stat-delivered">0</dd></div>
-    <div><dt>Returned</dt><dd id="stat-returned">0</dd></div>
-    <div><dt>Retried</dt><dd id="stat-retried">0</dd></div>
-    <div><dt>Deduplicated</dt><dd id="stat-deduplicated">0</dd></div>
-    <div class="lost"><dt>Lost</dt><dd id="stat-lost">0</dd></div>
-    <div class="proof">
-      <dt>Proof</dt>
-      <dd>
-        <a href={LINKS.invariants}>Read the tests</a>
-        <button type="button" id="sim-toggle">Pause</button>
-      </dd>
+  <div class="attacks no-print">
+    <div class="weapons" role="group" aria-labelledby="attacks-label">
+      <span class="attacks-label" id="attacks-label">Attack it</span>
+      {
+        conditions.map(([key, label]) => (
+          <button type="button" data-chaos={key} aria-pressed="false">{label}</button>
+        ))
+      }
+      <button type="button" data-attack="crash">Crash the store</button>
+      <button type="button" data-attack="blackout">Kill everything</button>
     </div>
+    <p class="proof">
+      <span id="sim-seed"></span>
+      <a href={LINKS.invariants}>Read the tests</a>
+      <button type="button" id="sim-toggle">Pause</button>
+    </p>
+  </div>
+
+  <dl class="counters no-print">
+    {traffic.map(([label, id]) => <div><dt>{label}</dt><dd id={id}>0</dd></div>)}
+    {
+      vows.map(([label, id]) => (
+        <div class="vow">
+          <dt>{label}<span class="sr-only">, has to stay at zero</span></dt>
+          <dd id={id}>0</dd>
+        </div>
+      ))
+    }
   </dl>
 </section>
 
@@ -112,7 +146,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     min-height: 100svh;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto auto minmax(12.5rem, 1fr) auto auto;
+    grid-template-rows: auto auto minmax(12.5rem, 1fr) auto auto auto;
     padding-top: 3.5rem;
     overflow: hidden;
   }
@@ -134,7 +168,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
 
   .title {
     padding-inline: var(--gutter);
-    font-size: min(16.35vw, 31svh);
+    font-size: min(16.35vw, 24svh);
     line-height: 0.84;
     margin-top: 0.25rem;
   }
@@ -185,7 +219,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
   .network {
     position: relative;
     margin: 0.5rem var(--gutter) 0.25rem;
-    min-height: clamp(12.5rem, 28svh, 15rem);
+    min-height: clamp(12.5rem, 24svh, 15rem);
   }
 
   canvas {
@@ -271,7 +305,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     color: var(--flare);
   }
 
-  .node.agency .label {
+  .node.source .label {
     left: calc(50% - var(--size) / 2);
   }
 
@@ -377,10 +411,89 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     color: var(--flare);
   }
 
+  .attacks {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem 2rem;
+    padding: 0.55rem var(--gutter);
+    border-top: 1px solid var(--line);
+    font-size: 0.75rem;
+  }
+
+  .weapons {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .attacks-label {
+    color: var(--flare);
+    margin-right: 0.5rem;
+  }
+
+  .weapons button {
+    padding: 0.3rem 0.65rem;
+    border: 1px solid var(--line);
+    color: var(--bone);
+    line-height: 1.4;
+    transition: border-color 0.15s, color 0.15s, background-color 0.15s;
+  }
+
+  .weapons button:hover {
+    border-color: var(--bone);
+  }
+
+  .weapons button[aria-pressed='true'],
+  .weapons button:active {
+    border-color: var(--flare);
+    color: var(--flare);
+    background: rgb(255 91 31 / 12%);
+  }
+
+  .proof {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 1.25rem;
+    color: var(--dim);
+  }
+
+  .proof a,
+  .proof button {
+    color: var(--bone);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--dim);
+  }
+
+  .proof a:hover,
+  .proof button:hover {
+    color: var(--flare);
+  }
+
   .counters {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr)) minmax(0, 1.3fr);
+    grid-template-columns: repeat(8, minmax(0, 1fr));
     border-top: 1px solid var(--line);
+  }
+
+  /* The promises sit apart from the traffic: a rule in the colour of an answer that came home. */
+  .vow {
+    box-shadow: inset 0 2px var(--answer);
+  }
+
+  .vow dd {
+    color: var(--answer);
+  }
+
+  .vow:has([data-broken]) {
+    box-shadow: inset 0 2px var(--flare);
+  }
+
+  .vow dd[data-broken] {
+    color: var(--flare);
   }
 
   .counters > div {
@@ -404,24 +517,11 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     line-height: 1.3;
   }
 
-  .proof dd {
-    display: flex;
-    gap: 1.25rem;
-    font-size: 0.8125rem;
-    font-weight: 400;
-    line-height: 2;
-  }
-
-  .proof a,
-  .proof button {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    text-decoration-color: var(--dim);
-  }
-
-  .proof a:hover,
-  .proof button:hover {
-    color: var(--flare);
+  /* On a short, wide screen the headline gives way so the numbers stay above the fold. */
+  @media (max-height: 800px) and (min-width: 761px) {
+    .title {
+      font-size: min(16.35vw, 17svh);
+    }
   }
 
   @media (max-width: 760px) {
@@ -460,7 +560,7 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
     }
 
     .hero {
-      grid-template-rows: auto auto minmax(20rem, 1fr) auto auto;
+      grid-template-rows: auto auto minmax(20rem, 1fr) auto auto auto;
     }
 
     .counters > div {
@@ -475,9 +575,17 @@ const products = TOPOLOGY.filter((node) => node.kind === 'product');
       border-top: 1px solid var(--line);
     }
 
-    .proof {
-      grid-column: 1 / -1;
-      border-left: 0 !important;
+    .attacks {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .attacks-label {
+      flex-basis: 100%;
+    }
+
+    .weapons button {
+      padding: 0.5rem 0.7rem;
     }
   }
 </style>

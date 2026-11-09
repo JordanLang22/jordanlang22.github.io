@@ -1,6 +1,6 @@
 import { createRng } from './rng';
 
-export type NodeKind = 'agency' | 'ingest' | 'store' | 'translate' | 'product';
+export type NodeKind = 'source' | 'ingest' | 'store' | 'translate' | 'product';
 export type Direction = 'inbound' | 'return';
 
 export interface SimNode {
@@ -9,14 +9,14 @@ export interface SimNode {
   up: boolean;
 }
 
-/** One message handed to the hub, by an agency system or by a product answering it. */
+/** One message handed to the hub, by an source system or by a product answering it. */
 export interface Envelope {
   readonly id: number;
-  readonly incident: number;
+  readonly thread: number;
   readonly seq: number;
   readonly from: string;
-  /** The agency system that opened this incident, which is where any answer has to go. */
-  readonly agency: string;
+  /** The source system that opened this thread, which is where any answer has to go. */
+  readonly origin: string;
   readonly direction: Direction;
 }
 
@@ -63,7 +63,7 @@ export type SimSignal =
 
 export interface SimConfig {
   readonly seed: number;
-  /** Probability that an up agency system emits on a given tick. */
+  /** Probability that an up source system emits on a given tick. */
   readonly emitRate: number;
   /** Probability that a product answers a message it applied. */
   readonly replyRate: number;
@@ -76,6 +76,21 @@ export interface SimConfig {
   readonly publishRate: number;
 }
 
+/**
+ * Hostile conditions on every link, on top of whatever nodes are down. All three are things real
+ * networks do. None of them is allowed to cost a message.
+ */
+export interface Chaos {
+  /** Probability that a packet vanishes on any single hop. */
+  loss: number;
+  /** Probability that a packet arrives twice at the end of a hop. */
+  duplicate: number;
+  /** Extra latency of up to this many ticks per hop, which shuffles arrival order. */
+  jitter: number;
+}
+
+export const CALM: Readonly<Chaos> = { loss: 0, duplicate: 0, jitter: 0 };
+
 export const DEFAULT_CONFIG: SimConfig = {
   seed: 2016,
   emitRate: 0.042,
@@ -87,9 +102,9 @@ export const DEFAULT_CONFIG: SimConfig = {
 };
 
 export const TOPOLOGY: readonly (Pick<SimNode, 'id' | 'kind'> & { label: string })[] = [
-  { id: 'cad', kind: 'agency', label: 'CAD' },
-  { id: 'phones', kind: 'agency', label: 'Phones' },
-  { id: 'radio', kind: 'agency', label: 'Radio' },
+  { id: 'source-a', kind: 'source', label: 'Source A' },
+  { id: 'source-b', kind: 'source', label: 'Source B' },
+  { id: 'source-c', kind: 'source', label: 'Source C' },
   { id: 'ingest', kind: 'ingest', label: 'Ingest' },
   { id: 'store', kind: 'store', label: 'Store' },
   { id: 'translate', kind: 'translate', label: 'Translate' },
@@ -109,14 +124,14 @@ interface Stream<T> {
   readonly held: Map<number, T>;
 }
 
-interface Incident {
+interface Thread {
   readonly id: number;
   nextSeq: number;
   remaining: number;
 }
 
 const STORE = 'store';
-const OPEN_INCIDENTS_PER_AGENCY = 2;
+const OPEN_THREADS_PER_SOURCE = 2;
 const ACK_KINDS: Partial<Record<PacketKind, PacketKind>> = {
   submit: 'submit-ack',
   deliver: 'deliver-ack',
@@ -125,9 +140,9 @@ const ACK_KINDS: Partial<Record<PacketKind, PacketKind>> = {
 /**
  * A deterministic model of a two-way integration hub.
  *
- * Agency systems submit messages to the hub, which stores them in order, fans each one out to the
+ * Source systems submit messages to the hub, which stores them in order, fans each one out to the
  * products with routing switched on, and translates it for each. Products can answer, and the
- * answer travels the same way back to the agency system that opened the incident.
+ * answer travels the same way back to the source system that opened the thread.
  *
  * Both directions share one protocol. A sender keeps a message until the store has acknowledged
  * it, and the store keeps a delivery until its target has. Any hop can lose any packet, so delivery
@@ -149,16 +164,17 @@ export class Simulation {
   };
   packets: Packet[] = [];
   tick = 0;
-  /** When false, agencies stop producing new incidents and the system drains what it has. */
+  /** When false, sources stop producing new threads and the system drains what it has. */
   emitting = true;
   onStore?: (envelope: Envelope, targets: readonly string[]) => void;
   onApply?: (delivery: Delivery) => void;
 
+  private chaos: Chaos = { ...CALM };
   private readonly config: SimConfig;
   private readonly random: () => number;
-  private readonly agencies: readonly SimNode[];
+  private readonly sources: readonly SimNode[];
   private readonly products: readonly SimNode[];
-  private readonly incidents = new Map<string, Incident[]>();
+  private readonly threads = new Map<string, Thread[]>();
   private readonly pending = new Map<string, Map<number, Attempt<Envelope>>>();
   private readonly rows = new Map<number, Attempt<Delivery>>();
   private readonly inboundStreams = new Map<string, Stream<Envelope>>();
@@ -170,18 +186,18 @@ export class Simulation {
   private signals: SimSignal[] = [];
   private nextEnvelopeId = 1;
   private nextDeliveryId = 1;
-  private nextIncidentId = 1;
+  private nextThreadId = 1;
 
   constructor(config: Partial<SimConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.random = createRng(this.config.seed);
     const nodes = TOPOLOGY.map(({ id, kind }): SimNode => ({ id, kind, up: true }));
     this.nodes = new Map(nodes.map((node) => [node.id, node]));
-    this.agencies = nodes.filter((node) => node.kind === 'agency');
+    this.sources = nodes.filter((node) => node.kind === 'source');
     this.products = nodes.filter((node) => node.kind === 'product');
-    for (const agency of this.agencies) {
-      this.incidents.set(agency.id, []);
-      this.pending.set(agency.id, new Map());
+    for (const source of this.sources) {
+      this.threads.set(source.id, []);
+      this.pending.set(source.id, new Map());
     }
     for (const product of this.products) {
       this.pending.set(product.id, new Map());
@@ -197,6 +213,28 @@ export class Simulation {
   /** Choose whether new messages go to a product. This is a decision, not a failure. */
   setRouting(product: string, on: boolean): void {
     if (this.routing.has(product)) this.routing.set(product, on);
+  }
+
+  /** Change the weather on every link. Unnamed fields keep their current value. */
+  setChaos(chaos: Partial<Chaos>): void {
+    this.chaos = { ...this.chaos, ...chaos };
+  }
+
+  /**
+   * Kill a node's process and start it again. Whatever was on the wire to or from it is gone, and
+   * it comes back knowing only what it wrote down. So it re-sends everything it holds that was
+   * never acknowledged, which is correct and also a flood of duplicates for someone else to absorb.
+   */
+  crash(id: string): void {
+    if (!this.nodes.has(id)) return;
+    const surviving: Packet[] = [];
+    for (const packet of this.packets) {
+      if (packet.from === id || packet.to === id) this.drop(id);
+      else surviving.push(packet);
+    }
+    this.packets = surviving;
+    if (id === STORE) for (const row of this.rows.values()) row.nextAttempt = this.tick;
+    for (const attempt of this.pending.get(id)?.values() ?? []) attempt.nextAttempt = this.tick;
   }
 
   /** Advance one tick and return what happened during it. */
@@ -264,16 +302,26 @@ export class Simulation {
       (packet.arrives <= this.tick ? arrived : inFlight).push(packet);
     }
     this.packets = inFlight;
+    const { loss, duplicate } = this.chaos;
     for (const packet of arrived) {
-      if (!this.nodes.get(packet.to)?.up) {
-        this.stats.dropped += 1;
-        this.signals.push({ type: 'dropped', node: packet.to });
-      } else if (packet.hop + 1 < packet.route.length - 1) {
-        this.launch({ ...packet, hop: packet.hop + 1 });
-      } else {
-        this.receive(packet);
+      // The generator is only consulted when a condition is switched on, so a calm run draws the
+      // same numbers it always did.
+      if (!this.nodes.get(packet.to)?.up || (loss > 0 && this.random() < loss)) {
+        this.drop(packet.to);
+        continue;
+      }
+      const copies = duplicate > 0 && this.random() < duplicate ? 2 : 1;
+      for (let copy = 0; copy < copies; copy += 1) {
+        if (packet.hop + 1 < packet.route.length - 1)
+          this.launch({ ...packet, hop: packet.hop + 1 });
+        else this.receive(packet);
       }
     }
+  }
+
+  private drop(node: string): void {
+    this.stats.dropped += 1;
+    this.signals.push({ type: 'dropped', node });
   }
 
   private receive(packet: Packet): void {
@@ -287,7 +335,7 @@ export class Simulation {
   }
 
   private receiveAtStore(envelope: Envelope): void {
-    const key = `${envelope.incident}:${envelope.from}`;
+    const key = `${envelope.thread}:${envelope.from}`;
     this.accept(this.inboundStreams, key, envelope.seq, envelope, STORE, (ready) => {
       this.unreleased.delete(ready.id);
       this.stats.stored += 1;
@@ -299,12 +347,12 @@ export class Simulation {
   }
 
   private targetsFor(envelope: Envelope): readonly string[] {
-    if (envelope.direction === 'return') return [envelope.agency];
+    if (envelope.direction === 'return') return [envelope.origin];
     return this.products.filter(({ id }) => this.routing.get(id)).map(({ id }) => id);
   }
 
   private createDelivery(envelope: Envelope, target: string): void {
-    const key = `${envelope.incident}>${target}`;
+    const key = `${envelope.thread}>${target}`;
     const seq = (this.nextDeliverySeq.get(key) ?? 0) + 1;
     this.nextDeliverySeq.set(key, seq);
     const delivery: Delivery = { id: this.nextDeliveryId++, envelope, target, seq };
@@ -313,7 +361,7 @@ export class Simulation {
   }
 
   private receiveAtTarget(delivery: Delivery): void {
-    const key = `${delivery.envelope.incident}>${delivery.target}`;
+    const key = `${delivery.envelope.thread}>${delivery.target}`;
     this.accept(this.targetStreams, key, delivery.seq, delivery, delivery.target, (ready) => {
       this.unapplied.delete(ready.id);
       const inbound = ready.envelope.direction === 'inbound';
@@ -353,43 +401,43 @@ export class Simulation {
 
   private answer(delivery: Delivery): void {
     const { target, envelope } = delivery;
-    const key = `${envelope.incident}:${target}`;
+    const key = `${envelope.thread}:${target}`;
     const seq = (this.nextReplySeq.get(key) ?? 0) + 1;
     this.nextReplySeq.set(key, seq);
     this.submit({
       id: this.nextEnvelopeId++,
-      incident: envelope.incident,
+      thread: envelope.thread,
       seq,
       from: target,
-      agency: envelope.agency,
+      origin: envelope.origin,
       direction: 'return',
     });
   }
 
   private emit(): void {
-    for (const agency of this.agencies) {
-      if (!agency.up || this.random() > this.config.emitRate) continue;
-      const open = this.incidents.get(agency.id) ?? [];
-      while (open.length < OPEN_INCIDENTS_PER_AGENCY) {
+    for (const source of this.sources) {
+      if (!source.up || this.random() > this.config.emitRate) continue;
+      const open = this.threads.get(source.id) ?? [];
+      while (open.length < OPEN_THREADS_PER_SOURCE) {
         open.push({
-          id: this.nextIncidentId++,
+          id: this.nextThreadId++,
           nextSeq: 1,
           remaining: 3 + Math.floor(this.random() * 6),
         });
       }
       const index = Math.floor(this.random() * open.length);
-      const incident = open[index] as Incident;
+      const thread = open[index] as Thread;
       this.stats.emitted += 1;
       this.submit({
         id: this.nextEnvelopeId++,
-        incident: incident.id,
-        seq: incident.nextSeq++,
-        from: agency.id,
-        agency: agency.id,
+        thread: thread.id,
+        seq: thread.nextSeq++,
+        from: source.id,
+        origin: source.id,
         direction: 'inbound',
       });
-      incident.remaining -= 1;
-      if (incident.remaining <= 0) open.splice(index, 1);
+      thread.remaining -= 1;
+      if (thread.remaining <= 0) open.splice(index, 1);
     }
   }
 
@@ -455,12 +503,14 @@ export class Simulation {
 
   private launch(packet: Omit<Packet, 'from' | 'to' | 'departed' | 'arrives'>): void {
     const [low, high] = this.config.latency;
+    const { jitter } = this.chaos;
+    const delay = jitter > 0 ? Math.floor(this.random() * (jitter + 1)) : 0;
     this.packets.push({
       ...packet,
       from: packet.route[packet.hop] as string,
       to: packet.route[packet.hop + 1] as string,
       departed: this.tick,
-      arrives: this.tick + low + Math.floor(this.random() * (high - low + 1)),
+      arrives: this.tick + low + Math.floor(this.random() * (high - low + 1)) + delay,
     });
   }
 

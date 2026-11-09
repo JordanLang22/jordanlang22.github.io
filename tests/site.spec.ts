@@ -38,6 +38,57 @@ test('a product can be switched off without anything failing', async ({ page }) 
   await expect(page.locator('#stat-lost')).toHaveText('0');
 });
 
+test('every attack at once still loses nothing and breaks no promise', async ({ page }) => {
+  await page.goto('/?seed=2016');
+  await expect(page.locator('#sim-seed')).toHaveText('Seed 2016');
+  for (const name of ['Drop packets', 'Duplicate packets', 'Shuffle order']) {
+    const button = page.getByRole('button', { name });
+    await button.click();
+    await expect(button).toHaveAttribute('aria-pressed', 'true');
+  }
+  await page.getByRole('button', { name: 'Crash the store' }).click();
+  await expect(page.locator('#sim-status')).toContainText('crashed and restarted');
+
+  // The attacks have to be real: retries and duplicates must actually happen.
+  await expect
+    .poll(() => count(page.locator('#stat-retried')), { timeout: 20_000 })
+    .toBeGreaterThan(3);
+  await expect
+    .poll(() => count(page.locator('#stat-deduplicated')), { timeout: 20_000 })
+    .toBeGreaterThan(3);
+  const before = await count(page.locator('#stat-delivered'));
+  await expect
+    .poll(() => count(page.locator('#stat-delivered')), { timeout: 20_000 })
+    .toBeGreaterThan(before);
+  for (const id of ['#stat-lost', '#stat-twice', '#stat-order', '#stat-misrouted']) {
+    await expect(page.locator(id)).toHaveText('0');
+    await expect(page.locator(id)).not.toHaveAttribute('data-broken');
+  }
+});
+
+test('killing everything holds every message, then recovers by itself', async ({ page }) => {
+  await page.goto('/');
+  await expect.poll(() => count(page.locator('#stat-delivered'))).toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Kill everything' }).click();
+  await expect(page.locator('[data-node][aria-pressed="true"]')).toHaveCount(9);
+  await expect(page.locator('#stat-lost')).toHaveText('0');
+  await expect(page.locator('[data-node][aria-pressed="true"]')).toHaveCount(0, {
+    timeout: 10_000,
+  });
+  const before = await count(page.locator('#stat-delivered'));
+  await expect
+    .poll(() => count(page.locator('#stat-delivered')), { timeout: 20_000 })
+    .toBeGreaterThan(before);
+  await expect(page.locator('#stat-lost')).toHaveText('0');
+});
+
+test('nothing on the page names the systems behind the day job', async ({ page }) => {
+  await page.goto('/');
+  const hero = page.locator('#top');
+  await expect(hero.getByRole('button', { name: 'Source A down' })).toBeVisible();
+  await expect(hero).not.toContainText(/CAD|Phones|Radio|agenc/i);
+});
+
 for (const [subject, key] of [
   ['Dendrition', 'dendrition'],
   ['KestrelTrader', 'kestrel'],

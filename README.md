@@ -5,18 +5,30 @@ My portfolio. The headline claims that software can keep its word, so the page h
 ## The simulation is real
 
 The system at the top of the page isn't an animation. [`src/sim/engine.ts`](src/sim/engine.ts) is a
-deterministic model of a two-way integration hub. Agency systems send messages in. The hub stores
-them, translates them for each product with routing switched on, and carries any answers back to
-the agency system that opened the incident. Any hop can lose any packet. The canvas only draws this
-state, and the Lost counter is computed from that state rather than hard-coded to zero.
+deterministic model of a two-way integration hub. It is generic on purpose: it models the pattern,
+not any system I run for an employer. Source systems send messages in. The hub stores them,
+translates them for each product with routing switched on, and carries any answers back to the
+source that opened the thread.
+
+The page dares you to lose a message. You can take any node down, switch a product off, drop
+packets on every link, deliver them twice, shuffle their order, crash the store, or kill everything
+at once. Four numbers have to stay at zero: lost, applied twice, out of order, and misrouted. None
+of them is hard-coded. Lost is computed from what the system still holds, and the other three come
+from [`src/sim/audit.ts`](src/sim/audit.ts), an auditor that shares no state with the simulation
+and only watches what targets apply. [`src/sim/audit.test.ts`](src/sim/audit.test.ts) breaks each
+promise on purpose to show the auditor can fail.
 
 [`src/sim/engine.test.ts`](src/sim/engine.test.ts) uses fast-check to throw hundreds of random
-schedules of failures and routing changes at it on every push, and asserts that:
+schedules at it on every push: outages, routing changes, crashes, and link conditions far worse than
+the page allows, up to 60% loss per hop with every packet doubled. It asserts that:
 
 1. No message is ever lost, in either direction, at any tick.
 2. Every delivery is applied exactly once.
 3. Every stream is applied in order.
-4. Every answer returns to the system that opened the incident.
+4. Every answer returns to the system that opened the thread.
+5. The auditor on the page agrees with all of the above.
+
+Add `?seed=` and a number to the address to replay the same traffic.
 
 ## The numbers measure themselves
 
